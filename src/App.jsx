@@ -68,6 +68,14 @@ import {
   round2
 } from './utils/financeEngine.js';
 import { buildPendingFromParsedSms, splitRawSmsInput } from './utils/bankSmsParser.js';
+import {
+  SmsBridge,
+  getNativeSmsPermissionStatus,
+  getSmsBridgeEnvironment,
+  openAndroidAppSettings,
+  requestNativeSmsPermission,
+  scanNativeBankSms
+} from './utils/nativeSmsBridge.js';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -532,36 +540,186 @@ export default function App() {
     [showToast]
   );
 
+  const [smsPermissionInfo, setSmsPermissionInfo] = useState(() => ({
+    ...getSmsBridgeEnvironment(),
+    granted: false,
+    readSms: false,
+    receiveSms: false,
+    state: 'prompt'
+  }));
+
+  const refreshSmsPermissionStatus = useCallback(async () => {
+    const env = getSmsBridgeEnvironment();
+    if (!env.hasPlugin) {
+      setSmsPermissionInfo({
+        ...env,
+        granted: false,
+        readSms: false,
+        receiveSms: false,
+        state: env.isNative ? 'plugin_missing' : 'browser'
+      });
+      return null;
+    }
+    const status = await getNativeSmsPermissionStatus();
+    setSmsPermissionInfo({ ...env, ...status });
+    return status;
+  }, []);
+
   useEffect(() => {
     window.onBankSmsReceived = (smsObj) => {
       if (!smsObj || (!smsObj.body && !smsObj.sender)) return 0;
       return ingestRawSmsEntries([smsObj], { silentIfEmpty: true });
     };
+
+    const env = getSmsBridgeEnvironment();
+    let listenerHandle = null;
+    let active = true;
+
+    if (env.hasPlugin) {
+      getNativeSmsPermissionStatus()
+        .then((status) => {
+          if (active) {
+            setSmsPermissionInfo({ ...env, ...status });
+          }
+        })
+        .catch(() => {});
+
+      Promise.resolve(
+        SmsBridge.addListener('smsReceived', (smsObj) => {
+          if (smsObj && (smsObj.body || smsObj.sender)) {
+            ingestRawSmsEntries([smsObj], { silentIfEmpty: true });
+          }
+        })
+      )
+        .then((handle) => {
+          if (active) {
+            listenerHandle = handle;
+          } else {
+            handle?.remove?.();
+          }
+        })
+        .catch(() => {});
+    }
+
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSmsPermissionStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
     return () => {
+      active = false;
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      if (listenerHandle?.remove) {
+        listenerHandle.remove();
+      }
       if (window.onBankSmsReceived) {
         delete window.onBankSmsReceived;
       }
     };
-  }, [ingestRawSmsEntries]);
+  }, [ingestRawSmsEntries, refreshSmsPermissionStatus]);
 
-  const handleScanDeviceBankSms = async () => {
-    if (typeof window.scanDeviceBankSms !== 'function') {
+  const handleRequestSmsPermission = async () => {
+    const env = getSmsBridgeEnvironment();
+    if (!env.hasPlugin) {
+      await refreshSmsPermissionStatus();
       showToast(
-        'Device SMS bridge unavailable in browser — use "Paste SMS" to import bank alerts',
+        env.isNative
+          ? 'Rebuild the Android APK with SmsBridgePlugin synced to grant SMS permission'
+          : 'SMS permission is only available in the installed Android app',
         'error'
       );
       return;
     }
     try {
-      const rawList = await Promise.resolve(window.scanDeviceBankSms());
-      if (!Array.isArray(rawList) || rawList.length === 0) {
-        showToast('No recent bank SMS found on device');
-        return;
+      const res = await requestNativeSmsPermission();
+      setSmsPermissionInfo({ ...env, ...res });
+      if (res.granted) {
+        showToast('SMS permission granted — scanning recent bank alerts now');
+        const scanRes = await scanNativeBankSms({ days: 30, limit: 150 });
+        if (scanRes.messages.length > 0) {
+          ingestRawSmsEntries(scanRes.messages);
+        } else {
+          showToast('SMS permission active — no recent bank alerts found');
+        }
+      } else {
+        showToast(
+          'SMS permission denied or restricted by Android — tap "Open App Settings" to allow SMS',
+          'error'
+        );
       }
-      ingestRawSmsEntries(rawList);
     } catch {
-      showToast('Unable to read device SMS alerts', 'error');
+      showToast('Unable to request SMS permission on this device', 'error');
     }
+  };
+
+  const handleOpenAppSettings = async () => {
+    const opened = await openAndroidAppSettings();
+    if (!opened) {
+      showToast('Open Android Settings > Apps > SmartLedger > Permissions > SMS manually');
+    }
+  };
+
+  const handleScanDeviceBankSms = async () => {
+    if (typeof window.scanDeviceBankSms === 'function') {
+      try {
+        const rawList = await Promise.resolve(window.scanDeviceBankSms());
+        if (!Array.isArray(rawList) || rawList.length === 0) {
+          showToast('No recent bank SMS found on device');
+          return;
+        }
+        ingestRawSmsEntries(rawList);
+      } catch {
+        showToast('Unable to read device SMS alerts', 'error');
+      }
+      return;
+    }
+
+    const env = getSmsBridgeEnvironment();
+    if (env.hasPlugin) {
+      try {
+        const res = await scanNativeBankSms({ days: 30, limit: 150 });
+        setSmsPermissionInfo((prev) => ({
+          ...prev,
+          ...env,
+          granted: res.granted,
+          readSms: res.granted,
+          state: res.granted ? 'granted' : 'denied'
+        }));
+
+        if (res.permissionDenied) {
+          showToast(
+            'SMS permission required — tap "Allow SMS" or "Open App Settings" below',
+            'error'
+          );
+          return;
+        }
+        if (res.messages.length === 0) {
+          showToast('No recent SMS messages found in inbox');
+          return;
+        }
+        ingestRawSmsEntries(res.messages);
+      } catch {
+        showToast('Unable to read Android SMS inbox', 'error');
+      }
+      return;
+    }
+
+    if (env.isNative) {
+      showToast(
+        'Native SMS plugin not bundled in this APK yet — rebuild APK after "npx cap sync android" or use "Paste SMS"',
+        'error'
+      );
+      return;
+    }
+
+    showToast(
+      'Browser blocks direct SMS reading — use "Paste SMS" below or install the Android APK',
+      'error'
+    );
   };
 
   const handlePasteRawSms = (rawText) => {
@@ -987,6 +1145,9 @@ export default function App() {
             onQuickFinalizePending={handleQuickFinalizePending}
             onEditAndFinalizePending={handleEditAndFinalizePending}
             onDismissPending={handleDismissPending}
+            smsPermissionInfo={smsPermissionInfo}
+            onRequestSmsPermission={handleRequestSmsPermission}
+            onOpenAppSettings={handleOpenAppSettings}
             onNavigate={setActiveTab}
             exchangeRate={exchangeRate}
             setExchangeRate={setExchangeRate}
@@ -1019,6 +1180,9 @@ export default function App() {
             onQuickFinalizePending={handleQuickFinalizePending}
             onEditAndFinalizePending={handleEditAndFinalizePending}
             onDismissPending={handleDismissPending}
+            smsPermissionInfo={smsPermissionInfo}
+            onRequestSmsPermission={handleRequestSmsPermission}
+            onOpenAppSettings={handleOpenAppSettings}
           />
         )}
 
@@ -1275,6 +1439,9 @@ function DashboardView({
   onQuickFinalizePending,
   onEditAndFinalizePending,
   onDismissPending,
+  smsPermissionInfo,
+  onRequestSmsPermission,
+  onOpenAppSettings,
   onNavigate,
   exchangeRate,
   setExchangeRate
@@ -1580,6 +1747,9 @@ function DashboardView({
         onQuickFinalize={onQuickFinalizePending}
         onEditAndFinalize={onEditAndFinalizePending}
         onDismissPending={onDismissPending}
+        smsPermissionInfo={smsPermissionInfo}
+        onRequestSmsPermission={onRequestSmsPermission}
+        onOpenAppSettings={onOpenAppSettings}
         compact
       />
 
@@ -1783,7 +1953,10 @@ function TransactionsView({
   onUpdatePendingItem,
   onQuickFinalizePending,
   onEditAndFinalizePending,
-  onDismissPending
+  onDismissPending,
+  smsPermissionInfo,
+  onRequestSmsPermission,
+  onOpenAppSettings
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [currencyFilter, setCurrencyFilter] = useState('ALL');
@@ -1863,6 +2036,9 @@ function TransactionsView({
         onQuickFinalize={onQuickFinalizePending}
         onEditAndFinalize={onEditAndFinalizePending}
         onDismissPending={onDismissPending}
+        smsPermissionInfo={smsPermissionInfo}
+        onRequestSmsPermission={onRequestSmsPermission}
+        onOpenAppSettings={onOpenAppSettings}
       />
 
       {/* UPCOMING / PLANNED SECTION IN TRANSACTIONS TAB */}

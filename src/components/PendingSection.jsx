@@ -7,6 +7,8 @@ import {
   Inbox,
   MessageSquareText,
   ScanSearch,
+  Settings,
+  ShieldCheck,
   Trash2,
   Users
 } from 'lucide-react';
@@ -23,6 +25,9 @@ export default function PendingSection({
   onQuickFinalize,
   onEditAndFinalize,
   onDismissPending,
+  smsPermissionInfo = null,
+  onRequestSmsPermission,
+  onOpenAppSettings,
   compact = false
 }) {
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -108,6 +113,66 @@ export default function PendingSection({
           </button>
         </div>
       </div>
+
+      {/* Native Android SMS Permission / Restricted Settings Helper */}
+      {smsPermissionInfo?.isNative && !smsPermissionInfo.granted && (
+        <div
+          data-testid="native-sms-permission-banner"
+          className="px-4 py-3 bg-slate-900 text-slate-100 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5"
+        >
+          {smsPermissionInfo.hasPlugin ? (
+            <>
+              <div className="space-y-0.5 text-xs">
+                <p className="font-extrabold text-white flex items-center gap-1.5">
+                  <ShieldCheck size={14} className="text-emerald-400 shrink-0" />
+                  <span>
+                    {smsPermissionInfo.state === 'denied'
+                      ? 'Android SMS permission is currently blocked'
+                      : 'Allow SMS permission to auto-scan UAE & Egyptian bank alerts'}
+                  </span>
+                </p>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  On Android 13+/Samsung sideloaded APKs: tap <strong className="text-white">Open App Settings</strong> &rarr;{' '}
+                  <strong className="text-white">&#8942; (top right)</strong> &rarr;{' '}
+                  <strong className="text-white">Allow restricted settings</strong> &rarr;{' '}
+                  <strong className="text-white">Permissions</strong> &rarr; <strong className="text-white">SMS</strong>.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                {onRequestSmsPermission && (
+                  <button
+                    type="button"
+                    onClick={onRequestSmsPermission}
+                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold touch-manipulation active:scale-95"
+                  >
+                    Allow SMS
+                  </button>
+                )}
+                {onOpenAppSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenAppSettings}
+                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-xs font-bold flex items-center gap-1.5 touch-manipulation active:scale-95"
+                  >
+                    <Settings size={13} />
+                    <span>Open App Settings</span>
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-0.5 text-xs">
+              <p className="font-extrabold text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle size={14} className="shrink-0" />
+                <span>APK rebuild needed for Android SMS permissions</span>
+              </p>
+              <p className="text-[11px] text-slate-300">
+                Your installed APK was built without <code className="text-white font-semibold">SmsBridgePlugin</code> &amp; <code className="text-white font-semibold">READ_SMS</code> in AndroidManifest. Rebuild the Android APK after syncing Capacitor (<code className="text-white font-semibold">npm run build &amp;&amp; npx cap sync android</code>) or use <strong className="text-white">Paste SMS</strong> now.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Paste Bank SMS Drawer */}
       {pasteOpen && (
