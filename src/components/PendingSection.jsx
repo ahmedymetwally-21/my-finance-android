@@ -63,17 +63,17 @@ export default function PendingSection({
   return (
     <div
       data-testid="pending-sms-section"
-      className="bg-white rounded-3xl border border-amber-200/90 shadow-2xs overflow-hidden"
+      className="bg-white dark:bg-[#0f172a] rounded-3xl border border-amber-200/90 dark:border-amber-900/60 shadow-2xs overflow-hidden"
     >
       {/* Header */}
-      <div className="px-4 py-3.5 bg-gradient-to-r from-amber-50/90 to-orange-50/60 border-b border-amber-200/70 flex flex-wrap items-center justify-between gap-2">
+      <div className="px-4 py-3.5 bg-gradient-to-r from-amber-50/90 to-orange-50/60 dark:from-amber-950/40 dark:to-orange-950/20 border-b border-amber-200/70 dark:border-amber-900/50 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
             <MessageSquareText size={18} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
                 Pending Bank SMS Queue
               </h3>
               <span
@@ -83,7 +83,7 @@ export default function PendingSection({
                 {pendingTransactions.length}
               </span>
             </div>
-            <p className="text-[11px] text-amber-900/80">
+            <p className="text-[11px] text-amber-900/80 dark:text-amber-300/80">
               Excluded from Wallet &amp; Monthly Balances until finalized
             </p>
           </div>
@@ -94,7 +94,7 @@ export default function PendingSection({
             type="button"
             onClick={handleScanClick}
             disabled={isScanning}
-            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95"
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95"
           >
             <ScanSearch size={14} />
             <span>{isScanning ? 'Scanning...' : 'Scan Recent Bank SMS'}</span>
@@ -105,7 +105,7 @@ export default function PendingSection({
             className={`min-h-[38px] px-3 py-1.5 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95 ${
               pasteOpen
                 ? 'bg-amber-600 text-white border-amber-600'
-                : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-50'
+                : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-amber-200 dark:border-amber-800/70 hover:bg-amber-50 dark:hover:bg-slate-800'
             }`}
           >
             <ClipboardPaste size={14} />
@@ -132,10 +132,12 @@ export default function PendingSection({
                   </span>
                 </p>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  On Android 13+/Samsung sideloaded APKs: tap <strong className="text-white">Open App Settings</strong> &rarr;{' '}
+                  On Android 13+/Samsung sideloaded APKs: tap{' '}
+                  <strong className="text-white">Open App Settings</strong> &rarr;{' '}
                   <strong className="text-white">&#8942; (top right)</strong> &rarr;{' '}
                   <strong className="text-white">Allow restricted settings</strong> &rarr;{' '}
-                  <strong className="text-white">Permissions</strong> &rarr; <strong className="text-white">SMS</strong>.
+                  <strong className="text-white">Permissions</strong> &rarr;{' '}
+                  <strong className="text-white">SMS</strong>.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -167,7 +169,14 @@ export default function PendingSection({
                 <span>APK rebuild needed for Android SMS permissions</span>
               </p>
               <p className="text-[11px] text-slate-300">
-                Your installed APK was built without <code className="text-white font-semibold">SmsBridgePlugin</code> &amp; <code className="text-white font-semibold">READ_SMS</code> in AndroidManifest. Rebuild the Android APK after syncing Capacitor (<code className="text-white font-semibold">npm run build &amp;&amp; npx cap sync android</code>) or use <strong className="text-white">Paste SMS</strong> now.
+                Your installed APK was built without{' '}
+                <code className="text-white font-semibold">SmsBridgePlugin</code> &amp;{' '}
+                <code className="text-white font-semibold">READ_SMS</code> in AndroidManifest.
+                Rebuild the Android APK after syncing Capacitor (
+                <code className="text-white font-semibold">
+                  npm run build &amp;&amp; npx cap sync android
+                </code>
+                ) or use <strong className="text-white">Paste SMS</strong> now.
               </p>
             </div>
           )}
@@ -178,13 +187,16 @@ export default function PendingSection({
       {pasteOpen && (
         <form
           onSubmit={handlePasteSubmit}
-          className="p-4 bg-slate-50 border-b border-slate-200 space-y-3"
+          className="p-4 bg-slate-50 dark:bg-slate-900/70 border-b border-slate-200 dark:border-slate-800 space-y-3"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label htmlFor="paste-sms-input" className="text-xs font-extrabold text-slate-800">
-              Paste 1 or multiple UAE / Egyptian Bank SMS messages
+            <label
+              htmlFor="paste-sms-input"
+              className="text-xs font-extrabold text-slate-800 dark:text-slate-100"
+            >
+              Paste 1 or multiple Bank SMS messages (any active currency)
             </label>
-            <span className="text-[11px] font-semibold text-slate-500">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
               Separate multiple SMS with a blank line
             </span>
           </div>
@@ -197,11 +209,11 @@ export default function PendingSection({
             }
             value={rawSmsText}
             onChange={(e) => setRawSmsText(e.target.value)}
-            className="w-full p-3 rounded-2xl bg-white border border-slate-200 text-xs font-medium text-slate-800 focus:outline-none focus:border-amber-500"
+            className="w-full p-3 rounded-2xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-800 dark:text-slate-100 focus:outline-none focus:border-amber-500"
           />
 
           <div className="space-y-1.5">
-            <span className="text-[11px] font-bold text-slate-500 block">
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 block">
               Quick Test Bank SMS Samples (including OTP rejection &amp; unmatched fallback):
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -210,7 +222,7 @@ export default function PendingSection({
                   key={tpl.label}
                   type="button"
                   onClick={() => handleInsertSample(tpl)}
-                  className="min-h-[32px] px-2.5 py-1 rounded-xl bg-white border border-slate-200 hover:border-amber-400 text-[11px] font-bold text-slate-700"
+                  className="min-h-[32px] px-2.5 py-1 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-amber-400 text-[11px] font-bold text-slate-700 dark:text-slate-200"
                 >
                   + {tpl.label}
                 </button>
@@ -222,7 +234,7 @@ export default function PendingSection({
             <button
               type="button"
               onClick={() => setPasteOpen(false)}
-              className="min-h-[40px] px-3.5 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-600"
+              className="min-h-[40px] px-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300"
             >
               Close
             </button>
@@ -239,14 +251,16 @@ export default function PendingSection({
       {/* Pending Queue Items */}
       {pendingTransactions.length === 0 ? (
         <div className="p-6 text-center space-y-1.5">
-          <Inbox size={26} className="mx-auto text-slate-300" />
-          <p className="text-xs font-bold text-slate-600">No pending bank alerts waiting for review.</p>
-          <p className="text-[11px] text-slate-400">
-            Tap &ldquo;Paste SMS&rdquo; or &ldquo;Scan Recent Bank SMS&rdquo; to import UAE &amp; Egyptian bank alerts.
+          <Inbox size={26} className="mx-auto text-slate-300 dark:text-slate-700" />
+          <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+            No pending bank alerts waiting for review.
+          </p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500">
+            Tap &ldquo;Paste SMS&rdquo; or &ldquo;Scan Recent Bank SMS&rdquo; to import bank alerts.
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
           {visibleItems.map((item) => {
             const curAccounts = accounts.filter((a) => a.currency === item.currency);
             const curCategories = categories.filter((c) => c.type === item.type);
@@ -258,24 +272,24 @@ export default function PendingSection({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-900 text-white">
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-900 dark:bg-slate-800 text-white">
                         {item.bankName || item.sender}
                       </span>
                       <span
                         className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md ${
                           isIncome
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-rose-100 text-rose-800'
+                            ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300'
                         }`}
                       >
                         {item.type}
                       </span>
                       {item.detectedLast4 ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                           Card ••{item.detectedLast4}
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/70">
                           No Card Digits
                         </span>
                       )}
@@ -288,7 +302,7 @@ export default function PendingSection({
                           className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
                             item.isShared
                               ? 'bg-indigo-600 text-white border-indigo-600'
-                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                           }`}
                         >
                           <Users size={10} />
@@ -297,14 +311,14 @@ export default function PendingSection({
                       )}
                     </div>
 
-                    <h4 className="text-sm font-extrabold text-slate-900 truncate">
+                    <h4 className="text-sm font-extrabold text-slate-900 dark:text-white truncate">
                       {item.description}
                     </h4>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       {item.dateTimeLabel || item.date}
                     </p>
                     {item.rawBody && (
-                      <p className="text-[11px] text-slate-500 bg-slate-50 px-2.5 py-1.5 rounded-xl border border-slate-200/70 line-clamp-2">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/70 px-2.5 py-1.5 rounded-xl border border-slate-200/70 dark:border-slate-800 line-clamp-2">
                         {item.rawBody}
                       </p>
                     )}
@@ -312,8 +326,10 @@ export default function PendingSection({
 
                   <div className="text-right shrink-0">
                     <div
-                      className={`text-base font-extrabold ${
-                        isIncome ? 'text-emerald-700' : 'text-slate-900'
+                      className={`text-base font-extrabold tabular-nums ${
+                        isIncome
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-slate-900 dark:text-white'
                       }`}
                     >
                       {isIncome ? '+' : '-'}
@@ -333,8 +349,8 @@ export default function PendingSection({
                       }
                       className={`w-full min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-extrabold ${
                         isMissingAccount
-                          ? 'bg-amber-50 border-amber-400 text-amber-950'
-                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                          ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-400 dark:border-amber-700 text-amber-950 dark:text-amber-200'
+                          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100'
                       }`}
                     >
                       <option value="">Select Account / Card ({item.currency})...</option>
@@ -346,7 +362,7 @@ export default function PendingSection({
                       ))}
                     </select>
                     {isMissingAccount && (
-                      <p className="text-[10px] font-bold text-amber-700 mt-1 flex items-center gap-1">
+                      <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 mt-1 flex items-center gap-1">
                         <AlertTriangle size={11} />
                         <span>Pick an account manually before finalizing</span>
                       </p>
@@ -359,7 +375,7 @@ export default function PendingSection({
                     onChange={(e) =>
                       onUpdatePendingItem(item.id, { categoryId: e.target.value })
                     }
-                    className="w-full min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold text-slate-800"
+                    className="w-full min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-800 dark:text-slate-100"
                   >
                     {curCategories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -369,7 +385,7 @@ export default function PendingSection({
                   </select>
                 </div>
 
-                {/* Action Buttons: Quick Finalize | Edit & Finalize | Dismiss */}
+                {/* Action Buttons */}
                 <div className="grid grid-cols-3 gap-2 pt-1">
                   <button
                     type="button"
@@ -382,7 +398,7 @@ export default function PendingSection({
                   <button
                     type="button"
                     onClick={() => onEditAndFinalize(item)}
-                    className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-xs font-extrabold flex items-center justify-center gap-1 touch-manipulation active:scale-95"
+                    className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800 text-xs font-extrabold flex items-center justify-center gap-1 touch-manipulation active:scale-95"
                   >
                     <Edit3 size={13} />
                     <span>Edit &amp; Finalize</span>
@@ -390,7 +406,7 @@ export default function PendingSection({
                   <button
                     type="button"
                     onClick={() => onDismissPending(item.id)}
-                    className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 text-xs font-bold flex items-center justify-center gap-1 touch-manipulation active:scale-95"
+                    className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/60 text-slate-600 dark:text-slate-300 hover:text-rose-700 dark:hover:text-rose-300 text-xs font-bold flex items-center justify-center gap-1 touch-manipulation active:scale-95"
                   >
                     <Trash2 size={13} />
                     <span>Dismiss</span>

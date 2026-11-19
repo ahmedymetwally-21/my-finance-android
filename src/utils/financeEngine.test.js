@@ -9,6 +9,11 @@ import {
   computeAccountBalances,
   computeAllTimeWalletTotals,
   computeStartingBalanceForTarget,
+  computeHierarchicalBudgets,
+  splitSectionBudgetEqually,
+  getBudgetHealthStatus,
+  getCurrencyUsage,
+  normalizeCurrenciesList,
   getDefaultAccountIdForCurrency,
   getParticipantDebtStatus,
   resolveSharingDefaults,
@@ -21,7 +26,9 @@ import {
   getPeriodPresetDates,
   DEFAULT_ACCOUNTS,
   DEFAULT_CATEGORIES,
+  DEFAULT_CURRENCIES,
   DEFAULT_PEOPLE,
+  DEFAULT_SECTIONS,
   DEFAULT_SHARING_PREFS
 } from './financeEngine.js';
 import {
@@ -436,5 +443,252 @@ test('normalizeImportedBackup maintains backward compatibility with v1, v2 & v3 
   assert.equal(normalized.accounts[1].name, 'Cash EGP');
   assert.equal(normalized.defaultSharing.scope, 'personal');
   assert.equal(normalized.people[1].archived, false);
+  assert.equal(normalized.currencies.length, 2);
+  assert.equal(normalized.primaryCurrency, 'AED');
+  assert.equal(normalized.appearancePrefs.theme, 'dark');
+  assert.deepEqual(normalized.budgets, {});
+  assert.equal(normalized.userProfile.displayName, 'SmartLedger User');
 });
+
+test('hierarchical budgeting computes section/part spend, cent-safe equal splits, over-allocation, and health thresholds', () => {
+  // Cent-safe equal split
+  const equal3 = splitSectionBudgetEqually(2000, ['cat_groceries', 'cat_restaurants', 'cat_transport']);
+  assert.equal(
+    Math.round((equal3.cat_groceries + equal3.cat_restaurants + equal3.cat_transport) * 100),
+    200000
+  );
+  assert.equal(equal3.cat_groceries, 666.67);
+  assert.equal(equal3.cat_restaurants, 666.67);
+  assert.equal(equal3.cat_transport, 666.66);
+
+  // Health thresholds: <75% healthy, 75-99% warning, >=100% over
+  assert.equal(getBudgetHealthStatus(500, 1000).status, 'healthy');
+  assert.equal(getBudgetHealthStatus(750, 1000).status, 'warning');
+  assert.equal(getBudgetHealthStatus(990, 1000).status, 'warning');
+  assert.equal(getBudgetHealthStatus(1000, 1000).status, 'over');
+  assert.equal(getBudgetHealthStatus(1200, 1000).status, 'over');
+
+  const budgets = {
+    AED: {
+      sec_daily: {
+        sectionBudget: 2000,
+        parts: {
+          cat_groceries: 1200,
+          cat_restaurants: 500,
+          cat_transport: 200 // Total allocated = 1900 -> 100 unallocated
+        }
+      },
+      sec_housing: {
+        sectionBudget: 1000,
+        parts: {
+          cat_rent: 800,
+          cat_bills: 400 // Total allocated = 1200 -> 200 over-allocated!
+        }
+      }
+    }
+  };
+
+  const periodTransactions = [
+    // Shared groceries: total 1200, my share 400
+    {
+      id: 't1',
+      type: 'expense',
+      amount: 1200,
+      currency: 'AED',
+      categoryId: 'cat_groceries',
+      isShared: true,
+      paidBy: 'me',
+      shares: { me: 400, p2: 400, p3: 400 }
+    },
+    // Restaurants personal: 450 (90% of 500 -> warning)
+    {
+      id: 't2',
+      type: 'expense',
+      amount: 450,
+      currency: 'AED',
+      categoryId: 'cat_restaurants',
+      isShared: false,
+      paidBy: 'me',
+      shares: { me: 450 }
+    },
+    // Transport personal: 250 (125% of 200 -> over)
+    {
+      id: 't3',
+      type: 'expense',
+      amount: 250,
+      currency: 'AED',
+      categoryId: 'cat_transport',
+      isShared: false,
+      paidBy: 'me',
+      shares: { me: 250 }
+    },
+    // EGP expense must NOT affect AED budget
+    {
+      id: 't4',
+      type: 'expense',
+      amount: 5000,
+      currency: 'EGP',
+      categoryId: 'cat_groceries',
+      isShared: false,
+      paidBy: 'me',
+      shares: { me: 5000 }
+    }
+  ];
+
+  const report = computeHierarchicalBudgets({
+    sections: DEFAULT_SECTIONS,
+    categories: DEFAULT_CATEGORIES,
+    budgets,
+    periodTransactions,
+    currency: 'AED'
+  });
+
+  const daily = report.sections.find((s) => s.section.id === 'sec_daily');
+  assert.ok(daily);
+  assert.equal(daily.sectionBudget, 2000);
+  assert.equal(daily.allocatedPartsTotal, 1900);
+  assert.equal(daily.unallocated, 100);
+  assert.equal(daily.overAllocatedBy, 0);
+  assert.equal(daily.isOverAllocated, false);
+  assert.equal(daily.sectionSpent, 1100); // 400 + 450 + 250
+  assert.equal(daily.sectionRemaining, 900);
+  assert.equal(daily.status, 'healthy');
+
+  const restPart = daily.parts.find((p) => p.category.id === 'cat_restaurants');
+  const transPart = daily.parts.find((p) => p.category.id === 'cat_transport');
+  assert.equal(restPart.status, 'warning');
+  assert.equal(transPart.status, 'over');
+  assert.equal(transPart.remaining, -50);
+
+  const housing = report.sections.find((s) => s.section.id === 'sec_housing');
+  assert.equal(housing.isOverAllocated, true);
+  assert.equal(housing.overAllocatedBy, 200);
+});
+
+test('dynamic multi-currency isolation, deletion protection, and custom SMS currency detection work cleanly', () => {
+  const currencies = normalizeCurrenciesList([
+    ...DEFAULT_CURRENCIES,
+    { code: 'USD', name: 'US Dollar', symbol: '$' },
+    { code: 'SAR', name: 'Saudi Riyal', symbol: 'SAR' }
+  ]);
+  assert.equal(currencies.length, 4);
+
+  const accounts = [
+    ...DEFAULT_ACCOUNTS,
+    { id: 'acc_usd_1', name: 'US Checking', type: 'bank', currency: 'USD', last4: '4321', startingBalance: 1000 }
+  ];
+  const txs = [
+    {
+      id: 'tx_usd_1',
+      type: 'expense',
+      amount: 200,
+      currency: 'USD',
+      accountId: 'acc_usd_1',
+      date: '2026-11-10',
+      isShared: true,
+      paidBy: 'me',
+      shares: { me: 100, p2: 100 }
+    }
+  ];
+
+  // USD is in use; SAR is unused and safe to delete
+  const usdUsage = getCurrencyUsage('USD', { accounts, transactions: txs });
+  const sarUsage = getCurrencyUsage('SAR', { accounts, transactions: txs });
+  assert.equal(usdUsage.inUse, true);
+  assert.equal(usdUsage.accountCount, 1);
+  assert.equal(usdUsage.txCount, 1);
+  assert.equal(sarUsage.inUse, false);
+
+  // Strict multi-currency isolation in Wallet, Cashflow & Participant Debt
+  const balMap = computeAccountBalances(accounts, txs, [], []);
+  const walletTotals = computeAllTimeWalletTotals(accounts, balMap, currencies);
+  assert.equal(walletTotals.USD.totalBalance, 800);
+  assert.equal(walletTotals.AED.totalBalance, 0);
+  assert.equal(walletTotals.SAR.totalBalance, 0);
+
+  const debts = computeDebtItems(txs, []);
+  const summary = computeFinancialSummary(txs, [], debts, currencies);
+  assert.equal(summary.USD.totalMyExpenses, 100);
+  assert.equal(summary.USD.outstandingReceivable, 100);
+  assert.equal(summary.AED.totalMyExpenses, 0);
+
+  const p2Debt = getParticipantDebtStatus('p2', debts, currencies);
+  assert.equal(p2Debt.hasUnsettledBalance, true);
+  assert.equal(p2Debt.byCurrency.USD.receive, 100);
+  assert.equal(p2Debt.byCurrency.AED.receive, 0);
+
+  // Multi-currency Bank SMS parsing (USD & SAR)
+  const usdSms = parseBankSms(
+    'Wio',
+    'Purchase of USD 149.99 at AMAZON.COM using Card ending 4321 on 18/11/2026.',
+    '2026-11-18T14:00:00Z',
+    currencies
+  );
+  assert.ok(usdSms);
+  assert.equal(usdSms.currency, 'USD');
+  assert.equal(usdSms.amount, 149.99);
+  assert.equal(usdSms.detectedLast4, '4321');
+
+  const sarSms = parseBankSms(
+    'AlRajhi',
+    'Purchase of SAR 85.00 at ALBAIK RIYADH on 18/11/2026.',
+    '2026-11-18T16:00:00Z',
+    currencies
+  );
+  assert.ok(sarSms);
+  assert.equal(sarSms.currency, 'SAR');
+  assert.equal(sarSms.amount, 85);
+
+  const built = buildPendingFromParsedSms({
+    parsedSmsList: [{ sender: 'Wio', body: 'Purchase of $45.50 at OPENAI using Card *4321 on 18/11/2026.' }],
+    accounts,
+    categories: DEFAULT_CATEGORIES,
+    defaultSharing: DEFAULT_SHARING_PREFS,
+    people: DEFAULT_PEOPLE,
+    currencies,
+    existingPending: [],
+    knownSignatures: []
+  });
+  assert.equal(built.items.length, 1);
+  assert.equal(built.items[0].currency, 'USD');
+  assert.equal(built.items[0].accountId, 'acc_usd_1');
+});
+
+test('normalizeImportedBackup roundtrips v4 schema with custom currencies, budgets, profile, and light theme', () => {
+  const v4Backup = {
+    appIdentifier: 'SmartLedgerFinance',
+    schemaVersion: 4,
+    data: {
+      currencies: [
+        ...DEFAULT_CURRENCIES,
+        { code: 'EUR', name: 'Euro', symbol: '€', builtIn: false }
+      ],
+      primaryCurrency: 'EUR',
+      budgets: {
+        EUR: {
+          sec_daily: { sectionBudget: 900, parts: { cat_groceries: 500, cat_restaurants: 400 } }
+        }
+      },
+      userProfile: {
+        displayName: 'Karim Mansour',
+        avatarDataUrl: 'data:image/jpeg;base64,/9j/4AAQ'
+      },
+      appearancePrefs: {
+        showLaunchSplash: false,
+        theme: 'light'
+      },
+      transactions: []
+    }
+  };
+
+  const restored = normalizeImportedBackup(v4Backup);
+  assert.ok(restored);
+  assert.equal(restored.currencies.length, 3);
+  assert.equal(restored.primaryCurrency, 'EUR');
+  assert.equal(restored.budgets.EUR.sec_daily.sectionBudget, 900);
+  assert.equal(restored.userProfile.displayName, 'Karim Mansour');
+  assert.equal(restored.appearancePrefs.theme, 'light');
+  assert.equal(restored.appearancePrefs.showLaunchSplash, false);
+});
+
 

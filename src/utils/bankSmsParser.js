@@ -1,7 +1,13 @@
-// Pure UAE & Egyptian Bank SMS Parser, Last-4-Digit Card Matcher,
-// OTP/Promo Filter, and Deduplication Engine.
+// Pure Multi-Currency Bank SMS Parser (UAE, Egypt & Custom Active Currencies),
+// Last-4-Digit Card Matcher, OTP/Promo Filter, and Deduplication Engine.
 
-import { pad2, resolveSharingDefaults, round2 } from './financeEngine.js';
+import {
+  DEFAULT_CURRENCIES,
+  getCurrencyCodes,
+  pad2,
+  resolveSharingDefaults,
+  round2
+} from './financeEngine.js';
 
 const BANK_MATCHERS = [
   { pattern: /\b(emirates\s*nbd|enbd)\b/i, name: 'Emirates NBD' },
@@ -19,7 +25,10 @@ const BANK_MATCHERS = [
   { pattern: /\b(banque\s*misr|bm)\b/i, name: 'Banque Misr' },
   { pattern: /\b(alex\s*bank|bank\s*of\s*alexandria)\b/i, name: 'AlexBank' },
   { pattern: /\b(hsbc)\b/i, name: 'HSBC' },
-  { pattern: /\b(instapay)\b/i, name: 'InstaPay' }
+  { pattern: /\b(instapay)\b/i, name: 'InstaPay' },
+  { pattern: /\b(alrajhi|al\s*rajhi)\b/i, name: 'Al Rajhi' },
+  { pattern: /\b(snb|alahli\s*saudi)\b/i, name: 'SNB' },
+  { pattern: /\b(revolut|wise|chase|amex)\b/i, name: 'International Card' }
 ];
 
 const OTP_OR_SECURITY_RE =
@@ -33,6 +42,14 @@ const EXPENSE_RE =
 
 const INCOME_RE =
   /\b(credited|has\s+been\s+credited|credit\s+(?:of|alert|amount|from|to\s+your)|received|salary|payroll|refund|refunded|deposit|deposited|inward\s*transfer|incoming\s*transfer|transferred\s*to\s*your|cashback\s*credited|reversal|reversed)\b/i;
+
+const SYMBOL_TO_CODE = {
+  $: 'USD',
+  '€': 'EUR',
+  '£': 'GBP',
+  '₺': 'TRY',
+  '₹': 'INR'
+};
 
 export function detectBankName(sender = '', body = '') {
   const combined = `${sender} ${body}`;
@@ -50,34 +67,74 @@ export function isIgnoredSms(sender = '', body = '') {
   if (!text) return true;
   if (OTP_OR_SECURITY_RE.test(text)) return true;
 
-  // Reject promo alerts if they do not explicitly indicate an executed debit/credit
   if (STRONG_PROMO_RE.test(text) && !/\b(debited|credited|purchased|withdrawn|spent|pos\b)\b/i.test(text)) {
     return true;
   }
   return false;
 }
 
-export function extractAmountAndCurrency(body = '') {
+/**
+ * Dynamically detects currency codes (AED, EGP, and any user-configured active currencies),
+ * regional aliases (DHS, LE, SR, KD, QR), and currency symbols ($, €, £).
+ */
+export function extractAmountAndCurrency(body = '', activeCurrencies = DEFAULT_CURRENCIES) {
   const text = String(body || '');
-  // Patterns supporting "AED 1,250.50", "1,250.50 AED", "EGP 450", "LE 320.00", "DHS 85.5"
+  const activeCodes = getCurrencyCodes(activeCurrencies);
+  const activeSet = new Set(activeCodes);
+
+  // Build token list from active currency codes + aliases for active currencies
+  const codeTokens = [...activeCodes];
+  if (activeSet.has('AED')) codeTokens.push('DHS', 'DH');
+  if (activeSet.has('EGP')) codeTokens.push('L\\.?E\\.?');
+  if (activeSet.has('SAR')) codeTokens.push('SR');
+  if (activeSet.has('KWD')) codeTokens.push('KD');
+  if (activeSet.has('QAR')) codeTokens.push('QR');
+
+  const tokenGroup = codeTokens.join('|');
   const patterns = [
-    /\b(AED|DHS?|EGP|L\.?E\.?)\s*[:.]?\s*([\d,]+(?:\.\d{1,2})?)/i,
-    /([\d,]+(?:\.\d{1,2})?)\s*(AED|DHS?|EGP|L\.?E\.?)\b/i
+    new RegExp(`\\b(${tokenGroup})\\s*[:.]?\\s*([\\d,]+(?:\\.\\d{1,2})?)`, 'i'),
+    new RegExp(`([\\d,]+(?:\\.\\d{1,2})?)\\s*(${tokenGroup})\\b`, 'i')
   ];
+
+  const mapRawCurrencyToCode = (rawCur) => {
+    const upper = String(rawCur || '').replace(/\./g, '').toUpperCase();
+    if (activeSet.has(upper)) return upper;
+    if (upper === 'DHS' || upper === 'DH') return 'AED';
+    if (upper === 'LE') return 'EGP';
+    if (upper === 'SR' && activeSet.has('SAR')) return 'SAR';
+    if (upper === 'KD' && activeSet.has('KWD')) return 'KWD';
+    if (upper === 'QR' && activeSet.has('QAR')) return 'QAR';
+    return activeCodes[0] || 'AED';
+  };
 
   for (const re of patterns) {
     const match = text.match(re);
     if (match) {
-      const rawCur = (match[1].match(/[A-Za-z]/) ? match[1] : match[2]).toUpperCase();
-      const rawNum = (match[1].match(/[A-Za-z]/) ? match[2] : match[1]).replace(/,/g, '');
+      const firstHasLetters = /[A-Za-z]/.test(match[1]);
+      const rawCur = (firstHasLetters ? match[1] : match[2]).toUpperCase();
+      const rawNum = (firstHasLetters ? match[2] : match[1]).replace(/,/g, '');
       const amount = round2(parseFloat(rawNum));
       if (!Number.isFinite(amount) || amount <= 0) continue;
 
-      const currency =
-        rawCur.startsWith('EGP') || rawCur.startsWith('L') ? 'EGP' : 'AED';
-      return { amount, currency };
+      return { amount, currency: mapRawCurrencyToCode(rawCur) };
     }
   }
+
+  // Symbol-based fallback for active currencies (e.g. "$45.00", "€120.50", "£19.99")
+  const activeSymbols = Object.entries(SYMBOL_TO_CODE).filter(([, code]) => activeSet.has(code));
+  if (activeSymbols.length > 0) {
+    const symChars = activeSymbols.map(([sym]) => `\\${sym}`).join('');
+    const symRe = new RegExp(`([${symChars}])\\s*([\\d,]+(?:\\.\\d{1,2})?)`);
+    const symMatch = text.match(symRe);
+    if (symMatch) {
+      const amount = round2(parseFloat(symMatch[2].replace(/,/g, '')));
+      const mappedCode = SYMBOL_TO_CODE[symMatch[1]];
+      if (Number.isFinite(amount) && amount > 0 && mappedCode) {
+        return { amount, currency: mappedCode };
+      }
+    }
+  }
+
   return null;
 }
 
@@ -105,39 +162,49 @@ export function matchAccountByLast4(last4, currency, accounts = []) {
   const cleanLast4 = String(last4).trim();
   if (!cleanLast4) return null;
 
-  // Prefer strict match on both last4 and currency
   const exact = accounts.find(
     (acc) => String(acc.last4 || '').trim() === cleanLast4 && acc.currency === currency
   );
   if (exact) return exact;
 
-  // Fallback only if exactly one account shares those last4 digits
   const byDigits = accounts.filter((acc) => String(acc.last4 || '').trim() === cleanLast4);
   if (byDigits.length === 1) return byDigits[0];
 
   return null;
 }
 
-export function extractMerchant(body = '', bankName = 'Bank Alert', type = 'expense') {
+export function extractMerchant(
+  body = '',
+  bankName = 'Bank Alert',
+  type = 'expense',
+  activeCurrencies = DEFAULT_CURRENCIES
+) {
   const text = String(body || '');
-  // Clean out balance suffixes first so "at Carrefour. Avl Bal AED 5,000" stops at Carrefour
+  const codes = getCurrencyCodes(activeCurrencies);
+  const codePattern = codes.join('|');
+
   const preCleaned = text
     .replace(/\b(?:avl|available|curr(?:ent)?|rem(?:aining)?)\s*(?:bal(?:ance)?|limit)\b[\s\S]*/i, '')
     .replace(/\bref(?:erence)?\s*(?:no\.?|#)?\s*[:#]?\s*[A-Z0-9-]+/gi, '');
 
   const merchantPatterns = [
-    /\b(?:at|@)\s+([A-Za-z0-9&'.,\-/\s]{2,42}?)(?=\s+(?:on|dated|for|AED|EGP|via|using|card|with|\d{2}[/-]\d{2})|[.\n,;]|$)/i,
-    /\b(?:merchant|to|from)\s*[:-]?\s*([A-Za-z0-9&'.,\-\s]{2,38}?)(?=\s+(?:on|AED|EGP|via|card|\d{2}[/-]\d{2})|[.\n,;]|$)/i
+    new RegExp(
+      `\\b(?:at|@)\\s+([A-Za-z0-9&'.,\\-/\\s]{2,42}?)(?=\\s+(?:on|dated|for|${codePattern}|via|using|card|with|\\d{2}[/-]\\d{2})|[.\\n,;]|$)`,
+      'i'
+    ),
+    new RegExp(
+      `\\b(?:merchant|to|from)\\s*[:-]?\\s*([A-Za-z0-9&'.,\\-\\s]{2,38}?)(?=\\s+(?:on|${codePattern}|via|card|\\d{2}[/-]\\d{2})|[.\\n,;]|$)`,
+      'i'
+    )
   ];
+
+  const stopRe = new RegExp(`^(your|card|account|a\\/c|ending|bank|${codePattern})$`, 'i');
 
   for (const re of merchantPatterns) {
     const m = preCleaned.match(re);
     if (m && m[1]) {
       const candidate = m[1].replace(/^[:\-\s]+|[:\-\s.]+$/g, '').trim();
-      if (
-        candidate.length >= 2 &&
-        !/^(your|card|account|a\/c|ending|aed|egp|bank)$/i.test(candidate)
-      ) {
+      if (candidate.length >= 2 && !stopRe.test(candidate)) {
         return candidate;
       }
     }
@@ -150,7 +217,6 @@ export function extractMerchant(body = '', bankName = 'Bank Alert', type = 'expe
 }
 
 export function normalizeSmsTimestamp(timestamp, body = '') {
-  // Try supplied timestamp first
   if (timestamp) {
     const num = Number(timestamp);
     const dt =
@@ -168,7 +234,6 @@ export function normalizeSmsTimestamp(timestamp, body = '') {
     }
   }
 
-  // Try extracting YYYY-MM-DD or DD/MM/YYYY or DD-MMM-YY from SMS body
   const isoMatch = String(body || '').match(/\b(20\d{2})[-/](\d{1,2})[-/](\d{1,2})\b/);
   if (isoMatch) {
     const date = `${isoMatch[1]}-${pad2(Number(isoMatch[2]))}-${pad2(Number(isoMatch[3]))}`;
@@ -197,9 +262,6 @@ export function normalizeSmsTimestamp(timestamp, body = '') {
   };
 }
 
-/**
- * Deterministic deduplication signature of (sender + amount + timestamp).
- */
 export function computeSmsSignature(sender = '', amount = 0, timestamp = '') {
   const normSender = String(sender || 'bank')
     .trim()
@@ -209,7 +271,6 @@ export function computeSmsSignature(sender = '', amount = 0, timestamp = '') {
   const normTs = String(timestamp || '').trim().toLowerCase();
   const raw = `${normSender}|${normAmount}|${normTs}`;
 
-  // Simple fast FNV-1a 32-bit hash + readable key
   let hash = 2166136261;
   for (let i = 0; i < raw.length; i++) {
     hash ^= raw.charCodeAt(i);
@@ -218,27 +279,27 @@ export function computeSmsSignature(sender = '', amount = 0, timestamp = '') {
   return `sms_${(hash >>> 0).toString(36)}_${normAmount}`;
 }
 
-/**
- * Parses a single bank SMS into a structured pending record, or returns null if ignored / non-transaction.
- */
-export function parseBankSms(sender, body, timestamp = '') {
+export function parseBankSms(
+  sender,
+  body,
+  timestamp = '',
+  activeCurrencies = DEFAULT_CURRENCIES
+) {
   const rawBody = String(body || '').trim();
   const rawSender = String(sender || '').trim();
   if (!rawBody) return null;
   if (isIgnoredSms(rawSender, rawBody)) return null;
 
-  const amountInfo = extractAmountAndCurrency(rawBody);
+  const amountInfo = extractAmountAndCurrency(rawBody, activeCurrencies);
   if (!amountInfo) return null;
 
   const isExpenseHit = EXPENSE_RE.test(rawBody);
   const isIncomeHit = INCOME_RE.test(rawBody);
 
-  // Require at least a clear transaction keyword if neither expense nor income matched
   if (!isExpenseHit && !isIncomeHit) {
     return null;
   }
 
-  // Note: "credited" / "received" wins for income unless it's clearly a card purchase message mentioning credit card
   let type = 'expense';
   if (isIncomeHit && !/\b(purchase|purchased|debited|spent|withdrawn|pos\b|online\s*txn)\b/i.test(rawBody)) {
     type = 'income';
@@ -246,7 +307,7 @@ export function parseBankSms(sender, body, timestamp = '') {
 
   const bankName = detectBankName(rawSender, rawBody);
   const detectedLast4 = extractLast4Digits(rawBody);
-  const description = extractMerchant(rawBody, bankName, type);
+  const description = extractMerchant(rawBody, bankName, type, activeCurrencies);
   const timeInfo = normalizeSmsTimestamp(timestamp, rawBody);
   const signature = computeSmsSignature(
     rawSender || bankName,
@@ -270,9 +331,6 @@ export function parseBankSms(sender, body, timestamp = '') {
   };
 }
 
-/**
- * Splits a multi-SMS pasted block into individual { sender, body, timestamp } entries.
- */
 export function splitRawSmsInput(rawText = '') {
   const text = String(rawText || '').trim();
   if (!text) return [];
@@ -284,7 +342,7 @@ export function splitRawSmsInput(rawText = '') {
 
   const entries = [];
   const standaloneLineRe =
-    /\b(otp|verification\s*code|aed|egp|purchase|purchased|debited|credited|spent|withdrawn|payment|received|salary|refund)\b/i;
+    /\b(otp|verification\s*code|aed|egp|usd|eur|sar|gbp|kwd|qar|purchase|purchased|debited|credited|spent|withdrawn|payment|received|salary|refund)\b/i;
 
   blocks.forEach((block) => {
     const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -326,14 +384,11 @@ export function splitRawSmsInput(rawText = '') {
   return entries;
 }
 
-/**
- * Converts parsed SMS records into Pending Transaction objects with matched Account/Card
- * (leaving accountId blank if unmatched) and pre-applied Default Sharing rules.
- */
 export function buildPendingFromParsedSms({
   parsedSmsList = [],
   accounts = [],
   categories = [],
+  currencies = DEFAULT_CURRENCIES,
   defaultSharing,
   people = [],
   existingPending = [],
@@ -361,7 +416,7 @@ export function buildPendingFromParsedSms({
   parsedSmsList.forEach((rawOrParsed) => {
     const parsed = rawOrParsed?.signature
       ? rawOrParsed
-      : parseBankSms(rawOrParsed?.sender, rawOrParsed?.body, rawOrParsed?.timestamp);
+      : parseBankSms(rawOrParsed?.sender, rawOrParsed?.body, rawOrParsed?.timestamp, currencies);
 
     if (!parsed) {
       ignoredCount += 1;
@@ -373,7 +428,6 @@ export function buildPendingFromParsedSms({
     }
     seenSignatures.add(parsed.signature);
 
-    // Heuristic category guess
     let categoryId = parsed.type === 'income' ? defaultIncomeCat : defaultExpenseCat;
     const descLower = `${parsed.description} ${parsed.rawBody}`.toLowerCase();
     if (parsed.type === 'income') {
@@ -396,11 +450,9 @@ export function buildPendingFromParsedSms({
       }
     }
 
-    // Match last-4 digits to saved account, else strictly leave blank ('') per user preference
     const matchedAccount = matchAccountByLast4(parsed.detectedLast4, parsed.currency, accounts);
     const accountId = matchedAccount ? matchedAccount.id : '';
 
-    // Pre-apply Global/Category sharing defaults
     const sharing =
       parsed.type === 'expense'
         ? resolveSharingDefaults(defaultSharing, categoryId, activePeople)

@@ -1,21 +1,45 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <meta name="theme-color" content="#090d16" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SmartLedger — AED &amp; EGP Personal Finance</title>
+    <title>SmartLedger — Multi-Currency Personal Finance &amp; Budgets</title>
     <meta
       name="description"
-      content="Dual-currency AED &amp; EGP personal finance, multi-account cards, Bank SMS queue, and unlimited shared expense manager."
+      content="Multi-currency personal finance, hierarchical section budgets, multi-account cards, Bank SMS queue, and unlimited shared expense manager."
     />
-    <meta property="og:title" content="SmartLedger — AED &amp; EGP Personal Finance" />
+    <meta property="og:title" content="SmartLedger — Multi-Currency Personal Finance &amp; Budgets" />
     <meta
       property="og:description"
-      content="Dual-currency AED &amp; EGP personal finance, multi-account cards, Bank SMS queue, and unlimited shared expense manager."
+      content="Multi-currency personal finance, hierarchical section budgets, multi-account cards, Bank SMS queue, and unlimited shared expense manager."
     />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('smartledger_theme') || 'dark';
+          var isDark =
+            saved === 'dark' ||
+            (saved === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var root = document.documentElement;
+          if (isDark) {
+            root.classList.add('dark');
+            root.style.backgroundColor = '#090d16';
+          } else {
+            root.classList.remove('dark');
+            root.style.backgroundColor = '#f8fafc';
+          }
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', isDark ? '#090d16' : '#f8fafc');
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body>
+  <body class="bg-slate-50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

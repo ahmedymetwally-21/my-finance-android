@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { AlertCircle, CalendarClock, Repeat, Sparkles, X } from 'lucide-react';
 import {
+  DEFAULT_CURRENCIES,
   computeEqualPercentages,
   computeEqualShares,
   computePercentageShares,
@@ -21,6 +22,8 @@ export default function TransactionModal({
   sections,
   categories,
   accounts = [],
+  currencies = DEFAULT_CURRENCIES,
+  primaryCurrency = 'AED',
   defaultSharing,
   onClose,
   onSavePosted,
@@ -31,10 +34,17 @@ export default function TransactionModal({
   const isEditing = Boolean(editingTx || editingUpcoming);
   const isReviewingPending = Boolean(editingPending);
 
+  const validCurrencies = useMemo(() => {
+    const base = currencies && currencies.length > 0 ? currencies : DEFAULT_CURRENCIES;
+    if (editingItem?.currency && !base.some((c) => c.code === editingItem.currency)) {
+      return [...base, { code: editingItem.currency, name: editingItem.currency, symbol: editingItem.currency }];
+    }
+    return base;
+  }, [currencies, editingItem]);
+
   const activePeople = useMemo(() => {
     const active = people.filter((p) => !p.archived);
     if (!editingItem) return active;
-    // Ensure any archived participant referenced in the edited item remains visible
     const referencedIds = new Set([
       editingItem.paidBy,
       editingItem.belongsTo,
@@ -93,19 +103,26 @@ export default function TransactionModal({
     return defaults?.mode === 'upcoming' ? 'upcoming' : 'posted';
   });
 
+  const initialCurrencyCode =
+    editingItem?.currency ||
+    (validCurrencies.some((c) => c.code === primaryCurrency)
+      ? primaryCurrency
+      : validCurrencies[0].code);
+
   const [type, setType] = useState(initialType);
   const [amount, setAmount] = useState(editingItem ? String(editingItem.amount) : '');
-  const [currency, setCurrency] = useState(editingItem?.currency || 'AED');
+  const [currency, setCurrency] = useState(initialCurrencyCode);
   const [accountId, setAccountId] = useState(() => {
-    const initCur = editingItem?.currency || 'AED';
     if (editingPending) {
       return editingPending.accountId || '';
     }
     if (editingItem?.accountId) {
-      const exists = accounts.some((a) => a.id === editingItem.accountId && a.currency === initCur);
+      const exists = accounts.some(
+        (a) => a.id === editingItem.accountId && a.currency === initialCurrencyCode
+      );
       if (exists) return editingItem.accountId;
     }
-    return getDefaultAccountIdForCurrency(accounts, initCur);
+    return getDefaultAccountIdForCurrency(accounts, initialCurrencyCode);
   });
   const [description, setDescription] = useState(editingItem?.description || '');
   const [date, setDate] = useState(
@@ -113,7 +130,8 @@ export default function TransactionModal({
   );
   const [frequency, setFrequency] = useState(editingUpcoming?.frequency || 'once');
   const [notes, setNotes] = useState(
-    () => editingItem?.notes || (editingPending ? `Imported from ${editingPending.bankName} SMS` : '')
+    () =>
+      editingItem?.notes || (editingPending ? `Imported from ${editingPending.bankName} SMS` : '')
   );
   const [categoryId, setCategoryId] = useState(initialCategoryId);
 
@@ -307,8 +325,14 @@ export default function TransactionModal({
       setFormError('Please enter a valid amount greater than 0.');
       return;
     }
-    if (!accountId) {
+    if (!accountId && currencyAccounts.length > 0) {
       setFormError(`Please select an Account or Card (${currency}).`);
+      return;
+    }
+    if (!accountId && currencyAccounts.length === 0) {
+      setFormError(
+        `No ${currency} accounts exist yet. Add a ${currency} account in Accounts Manager first.`
+      );
       return;
     }
     if (!description.trim()) {
@@ -382,19 +406,19 @@ export default function TransactionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-label={isEditing ? 'Edit Transaction' : 'Add Transaction'}
-        className="bg-white w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92dvh] flex flex-col"
+        className="bg-white dark:bg-[#0f172a] w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[92dvh] flex flex-col"
       >
         <div className="pt-2.5 pb-1 flex justify-center sm:hidden shrink-0">
-          <div className="w-10 h-1.5 rounded-full bg-slate-300" />
+          <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700" />
         </div>
 
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-base font-extrabold text-slate-900">
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
             {editingPending
               ? 'Review & Finalize Bank SMS'
               : editingUpcoming
@@ -409,7 +433,7 @@ export default function TransactionModal({
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="w-11 h-11 flex items-center justify-center rounded-2xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:scale-95 touch-manipulation"
+            className="w-11 h-11 flex items-center justify-center rounded-2xl text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 touch-manipulation"
           >
             <X size={20} />
           </button>
@@ -417,16 +441,16 @@ export default function TransactionModal({
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
           <div className="p-5 space-y-4 overflow-y-auto flex-1">
-            {/* Post Now vs Schedule / Upcoming Switcher (when creating new) */}
+            {/* Post Now vs Schedule / Upcoming Switcher */}
             {!isEditing && (
-              <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl select-none">
+              <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl select-none">
                 <button
                   type="button"
                   onClick={() => setEntryMode('posted')}
                   className={`min-h-[40px] py-1.5 text-xs font-extrabold rounded-xl transition touch-manipulation ${
                     entryMode === 'posted'
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-slate-900 dark:bg-slate-950 text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   Post Now (Actual)
@@ -437,7 +461,7 @@ export default function TransactionModal({
                   className={`min-h-[40px] py-1.5 text-xs font-extrabold rounded-xl transition flex items-center justify-center gap-1.5 touch-manipulation ${
                     entryMode === 'upcoming'
                       ? 'bg-amber-600 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   <CalendarClock size={14} />
@@ -447,14 +471,14 @@ export default function TransactionModal({
             )}
 
             {/* Expense vs Income Switcher */}
-            <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl select-none">
+            <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl select-none">
               <button
                 type="button"
                 onClick={() => handleTypeSwitch('expense')}
                 className={`min-h-[44px] py-2 text-xs sm:text-sm font-extrabold rounded-xl transition touch-manipulation active:scale-[0.98] ${
                   type === 'expense'
                     ? 'bg-rose-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Expense
@@ -465,17 +489,20 @@ export default function TransactionModal({
                 className={`min-h-[44px] py-2 text-xs sm:text-sm font-extrabold rounded-xl transition touch-manipulation active:scale-[0.98] ${
                   type === 'income'
                     ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 Income
               </button>
             </div>
 
-            {/* Amount + Currency Row */}
+            {/* Amount + Dynamic Currency Row */}
             <div className="grid grid-cols-3 gap-2.5">
               <div className="col-span-2">
-                <label htmlFor="tx-amount" className="text-xs font-bold text-slate-600 block mb-1">
+                <label
+                  htmlFor="tx-amount"
+                  className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+                >
                   Amount
                 </label>
                 <input
@@ -487,34 +514,58 @@ export default function TransactionModal({
                   autoFocus
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full min-h-[50px] text-xl font-extrabold px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full min-h-[50px] text-xl font-extrabold px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white tabular-nums focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-indigo-500 dark:focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <span className="text-xs font-bold text-slate-600 block mb-1">Currency</span>
-                <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-2xl h-[50px] select-none">
-                  {['AED', 'EGP'].map((cur) => (
-                    <button
-                      key={cur}
-                      type="button"
-                      onClick={() => handleCurrencyChange(cur)}
-                      className={`text-xs font-extrabold rounded-xl transition touch-manipulation active:scale-95 ${
-                        currency === cur
-                          ? 'bg-indigo-600 text-white shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      {cur}
-                    </button>
-                  ))}
-                </div>
+                <label
+                  htmlFor="tx-currency"
+                  className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+                >
+                  Currency
+                </label>
+                {validCurrencies.length <= 2 ? (
+                  <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl h-[50px] select-none">
+                    {validCurrencies.map((c) => (
+                      <button
+                        key={c.code}
+                        type="button"
+                        onClick={() => handleCurrencyChange(c.code)}
+                        className={`text-xs font-extrabold rounded-xl transition touch-manipulation active:scale-95 ${
+                          currency === c.code
+                            ? 'bg-indigo-600 dark:bg-emerald-600 text-white shadow-2xs'
+                            : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        {c.code}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <select
+                    id="tx-currency"
+                    aria-label="Transaction currency"
+                    value={currency}
+                    onChange={(e) => handleCurrencyChange(e.target.value)}
+                    className="w-full h-[50px] px-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-extrabold text-indigo-700 dark:text-emerald-400 focus:outline-none focus:border-indigo-500"
+                  >
+                    {validCurrencies.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} ({c.symbol})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
             {/* Account / Card Selector */}
             <div>
-              <label htmlFor="tx-account" className="text-xs font-bold text-slate-600 block mb-1">
+              <label
+                htmlFor="tx-account"
+                className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+              >
                 Account / Card ({currency})
               </label>
               <select
@@ -523,11 +574,15 @@ export default function TransactionModal({
                 onChange={(e) => setAccountId(e.target.value)}
                 className={`w-full min-h-[46px] text-sm font-bold px-3 py-2 rounded-2xl border focus:outline-none ${
                   !accountId
-                    ? 'bg-amber-50 border-amber-400 text-amber-950 focus:border-amber-600'
-                    : 'bg-slate-50 border-slate-200 text-slate-900 focus:bg-white focus:border-indigo-500'
+                    ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-400 dark:border-amber-700 text-amber-950 dark:text-amber-200 focus:border-amber-600'
+                    : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-950 focus:border-indigo-500'
                 }`}
               >
-                <option value="">Select Account / Card...</option>
+                <option value="">
+                  {currencyAccounts.length === 0
+                    ? `No ${currency} accounts yet — add one in Accounts`
+                    : 'Select Account / Card...'}
+                </option>
                 {currencyAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
                     {acc.name}
@@ -539,7 +594,10 @@ export default function TransactionModal({
 
             {/* Description */}
             <div>
-              <label htmlFor="tx-desc" className="text-xs font-bold text-slate-600 block mb-1">
+              <label
+                htmlFor="tx-desc"
+                className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+              >
                 Description
               </label>
               <input
@@ -552,21 +610,24 @@ export default function TransactionModal({
                 }
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full min-h-[48px] text-sm font-medium px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                className="w-full min-h-[48px] text-sm font-medium px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
             {/* Category & Date */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
-                <label htmlFor="tx-category" className="text-xs font-bold text-slate-600 block mb-1">
+                <label
+                  htmlFor="tx-category"
+                  className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+                >
                   {type === 'income' ? 'Income Source / Category' : 'Category'}
                 </label>
                 <select
                   id="tx-category"
                   value={categoryId}
                   onChange={(e) => handleCategoryChange(e.target.value)}
-                  className="w-full min-h-[48px] text-sm font-semibold px-3 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full min-h-[48px] text-sm font-semibold px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-indigo-500"
                 >
                   {sections.map((sec) => {
                     const secCats = availableCategories.filter((c) => c.sectionId === sec.id);
@@ -585,7 +646,10 @@ export default function TransactionModal({
               </div>
 
               <div>
-                <label htmlFor="tx-date" className="text-xs font-bold text-slate-600 block mb-1">
+                <label
+                  htmlFor="tx-date"
+                  className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+                >
                   {entryMode === 'upcoming' ? 'Due Date' : 'Date'}
                 </label>
                 <input
@@ -593,23 +657,20 @@ export default function TransactionModal({
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full min-h-[48px] text-sm font-semibold px-3 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                  className="w-full min-h-[48px] text-sm font-semibold px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-indigo-500"
                 />
               </div>
             </div>
 
             {/* Recurring Frequency for Upcoming Items */}
             {entryMode === 'upcoming' && (
-              <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="tx-frequency"
-                    className="text-xs font-extrabold text-amber-900 flex items-center gap-1.5"
-                  >
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/70 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                     <Repeat size={14} />
                     <span>Repeat Frequency</span>
-                  </label>
-                  <span className="text-[11px] font-semibold text-amber-800">
+                  </span>
+                  <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
                     Won&apos;t affect balances until posted
                   </span>
                 </div>
@@ -627,7 +688,7 @@ export default function TransactionModal({
                       className={`min-h-[40px] px-2 py-1.5 rounded-xl text-xs font-extrabold border transition touch-manipulation ${
                         frequency === freq.id
                           ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
-                          : 'bg-white text-slate-700 border-amber-200/80'
+                          : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-amber-200/80 dark:border-amber-800/60'
                       }`}
                     >
                       {freq.label}
@@ -639,20 +700,20 @@ export default function TransactionModal({
 
             {/* EXPENSE-ONLY: PERSONAL VS SHARED ENGINE */}
             {type === 'expense' && (
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 space-y-3.5">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/90 dark:border-slate-800 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                       Ownership
                     </span>
                     {appliedRuleLabel && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                         <Sparkles size={10} />
                         {appliedRuleLabel}
                       </span>
                     )}
                   </div>
-                  <div className="inline-flex p-1 bg-slate-200/80 rounded-xl select-none">
+                  <div className="inline-flex p-1 bg-slate-200/80 dark:bg-slate-800 rounded-xl select-none">
                     <button
                       type="button"
                       onClick={() => {
@@ -660,7 +721,9 @@ export default function TransactionModal({
                         setIsShared(false);
                       }}
                       className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation ${
-                        !isShared ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                        !isShared
+                          ? 'bg-white dark:bg-slate-950 text-slate-900 dark:text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       Personal
@@ -672,7 +735,9 @@ export default function TransactionModal({
                         setIsShared(true);
                       }}
                       className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation ${
-                        isShared ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-600'
+                        isShared
+                          ? 'bg-indigo-600 text-white shadow-2xs'
+                          : 'text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       Shared Split
@@ -682,7 +747,7 @@ export default function TransactionModal({
 
                 {/* Who Paid? */}
                 <div>
-                  <label className="text-xs font-bold text-slate-600 block mb-1.5">
+                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1.5">
                     Who Paid for This Expense?
                   </label>
                   <div className="flex flex-wrap gap-2 select-none">
@@ -697,7 +762,7 @@ export default function TransactionModal({
                         className={`min-h-[44px] py-2 px-3 rounded-xl border text-xs font-extrabold transition touch-manipulation active:scale-95 flex items-center gap-1.5 ${
                           paidBy === p.id
                             ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
                         }`}
                       >
                         <span
@@ -713,7 +778,7 @@ export default function TransactionModal({
                 {/* Personal: Who Does It Belong To? */}
                 {!isShared && (
                   <div>
-                    <label className="text-xs font-bold text-slate-600 block mb-1.5">
+                    <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1.5">
                       Who Does This Personal Expense Belong To?
                     </label>
                     <div className="flex flex-wrap gap-2 select-none">
@@ -727,8 +792,8 @@ export default function TransactionModal({
                           }}
                           className={`min-h-[42px] py-2 px-3 rounded-xl border text-xs font-bold transition touch-manipulation active:scale-95 ${
                             belongsTo === p.id
-                              ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                              : 'bg-white text-slate-700 border-slate-200'
+                              ? 'bg-slate-900 dark:bg-emerald-600 text-white border-slate-900 dark:border-emerald-600 shadow-2xs'
+                              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700'
                           }`}
                         >
                           {p.name}
@@ -740,22 +805,22 @@ export default function TransactionModal({
 
                 {/* Shared Split Controls */}
                 {isShared && (
-                  <div className="space-y-3 pt-2 border-t border-slate-200">
+                  <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-slate-600">
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
                         How Should It Be Divided?
                       </span>
                       {splitMode === 'percentage' && (
                         <button
                           type="button"
                           onClick={handleEqualizePercentages}
-                          className="text-[11px] font-extrabold text-indigo-600 hover:underline touch-manipulation"
+                          className="text-[11px] font-extrabold text-indigo-600 dark:text-emerald-400 hover:underline touch-manipulation"
                         >
                           Split % Equally
                         </button>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 p-1 bg-slate-200/80 rounded-xl select-none">
+                    <div className="grid grid-cols-3 p-1 bg-slate-200/80 dark:bg-slate-800 rounded-xl select-none">
                       {[
                         { id: 'equal', label: 'Equal' },
                         { id: 'custom', label: 'Custom' },
@@ -769,7 +834,9 @@ export default function TransactionModal({
                             setSplitMode(m.id);
                           }}
                           className={`min-h-[40px] py-1.5 text-xs font-bold rounded-lg transition touch-manipulation ${
-                            splitMode === m.id ? 'bg-white text-indigo-700 shadow-2xs' : 'text-slate-600'
+                            splitMode === m.id
+                              ? 'bg-white dark:bg-slate-950 text-indigo-700 dark:text-emerald-400 shadow-2xs'
+                              : 'text-slate-600 dark:text-slate-300'
                           }`}
                         >
                           {m.label}
@@ -783,7 +850,7 @@ export default function TransactionModal({
                         return (
                           <div
                             key={p.id}
-                            className="min-h-[48px] flex items-center justify-between gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80"
+                            className="min-h-[48px] flex items-center justify-between gap-2 bg-white dark:bg-slate-950/70 px-3 py-2 rounded-xl border border-slate-200/80 dark:border-slate-800"
                           >
                             <label className="flex items-center gap-2.5 cursor-pointer min-h-[36px] select-none min-w-0">
                               {splitMode === 'equal' && (
@@ -798,13 +865,13 @@ export default function TransactionModal({
                                 className="w-2.5 h-2.5 rounded-full shrink-0"
                                 style={{ backgroundColor: p.color }}
                               />
-                              <span className="text-xs font-bold text-slate-800 truncate">
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
                                 {p.name}
                               </span>
                             </label>
 
                             {splitMode === 'equal' && (
-                              <span className="text-xs font-extrabold text-slate-900 shrink-0">
+                              <span className="text-xs font-extrabold text-slate-900 dark:text-white shrink-0 tabular-nums">
                                 {formatMoney(computedShares[p.id] || 0, currency)}
                               </span>
                             )}
@@ -820,11 +887,14 @@ export default function TransactionModal({
                                   value={customAmounts[p.id] ?? ''}
                                   onChange={(e) => {
                                     markManualOverride();
-                                    setCustomAmounts({ ...customAmounts, [p.id]: e.target.value });
+                                    setCustomAmounts({
+                                      ...customAmounts,
+                                      [p.id]: e.target.value
+                                    });
                                   }}
-                                  className="w-24 min-h-[38px] text-right text-xs font-extrabold px-2.5 py-1.5 rounded-lg border border-slate-300"
+                                  className="w-24 min-h-[38px] text-right text-xs font-extrabold px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white tabular-nums"
                                 />
-                                <span className="text-[11px] font-bold text-slate-500">
+                                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                                   {currency}
                                 </span>
                               </div>
@@ -845,10 +915,12 @@ export default function TransactionModal({
                                       [p.id]: e.target.value
                                     });
                                   }}
-                                  className="w-16 min-h-[38px] text-right text-xs font-extrabold px-2 py-1.5 rounded-lg border border-slate-300"
+                                  className="w-16 min-h-[38px] text-right text-xs font-extrabold px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white tabular-nums"
                                 />
-                                <span className="text-xs font-bold text-slate-500">%</span>
-                                <span className="text-[11px] font-bold text-indigo-700 w-20 text-right">
+                                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                                  %
+                                </span>
+                                <span className="text-[11px] font-bold text-indigo-700 dark:text-emerald-400 w-20 text-right tabular-nums">
                                   ({formatCompact(computedShares[p.id] || 0)})
                                 </span>
                               </div>
@@ -860,12 +932,12 @@ export default function TransactionModal({
 
                     {splitMode === 'custom' && numericAmount > 0 && (
                       <div className="flex justify-between text-[11px] font-bold px-1">
-                        <span className="text-slate-500">Entered Sum:</span>
+                        <span className="text-slate-500 dark:text-slate-400">Entered Sum:</span>
                         <span
                           className={
                             Math.abs(customSum - numericAmount) <= 0.01
-                              ? 'text-emerald-700'
-                              : 'text-rose-600'
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-rose-600 dark:text-rose-400'
                           }
                         >
                           {formatMoney(customSum, currency)} / {formatMoney(numericAmount, currency)}
@@ -875,12 +947,12 @@ export default function TransactionModal({
 
                     {splitMode === 'percentage' && (
                       <div className="flex justify-between text-[11px] font-bold px-1">
-                        <span className="text-slate-500">Percentage Sum:</span>
+                        <span className="text-slate-500 dark:text-slate-400">Percentage Sum:</span>
                         <span
                           className={
                             Math.abs(percentageSum - 100) <= 0.1
-                              ? 'text-emerald-700'
-                              : 'text-rose-600'
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-rose-600 dark:text-rose-400'
                           }
                         >
                           {percentageSum}% / 100%
@@ -890,9 +962,9 @@ export default function TransactionModal({
                   </div>
                 )}
 
-                {/* Live Debt Impact Preview for Unlimited Dynamic Participants */}
+                {/* Live Debt Impact Preview */}
                 {numericAmount > 0 && (isShared || paidBy !== belongsTo) && (
-                  <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-100 text-[11px] text-indigo-900 space-y-0.5">
+                  <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-100 dark:border-indigo-800/80 text-[11px] text-indigo-900 dark:text-indigo-200 space-y-0.5">
                     <div className="font-bold">Automatic Debt Calculation Preview:</div>
                     {paidBy === 'me' ? (
                       Object.entries(computedShares)
@@ -920,7 +992,10 @@ export default function TransactionModal({
 
             {/* Optional Notes */}
             <div>
-              <label htmlFor="tx-notes" className="text-xs font-bold text-slate-600 block mb-1">
+              <label
+                htmlFor="tx-notes"
+                className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1"
+              >
                 Notes (Optional)
               </label>
               <input
@@ -929,23 +1004,23 @@ export default function TransactionModal({
                 placeholder="Receipt details, bank ref, or extra context..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="w-full min-h-[46px] text-xs sm:text-sm px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                className="w-full min-h-[46px] text-xs sm:text-sm px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:bg-white dark:focus:bg-slate-950 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
             {formError && (
-              <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700 flex items-center gap-2">
+              <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 flex items-center gap-2">
                 <AlertCircle size={16} className="shrink-0" />
                 <span>{formError}</span>
               </div>
             )}
           </div>
 
-          <div className="px-5 pt-3 pb-[calc(0.85rem+env(safe-area-inset-bottom))] border-t border-slate-100 bg-white flex items-center gap-2.5 shrink-0">
+          <div className="px-5 pt-3 pb-[calc(0.85rem+env(safe-area-inset-bottom))] border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] flex items-center gap-2.5 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 min-h-[50px] py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-[0.98] text-slate-700 text-sm font-bold touch-manipulation"
+              className="flex-1 min-h-[50px] py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-[0.98] text-slate-700 dark:text-slate-200 text-sm font-bold touch-manipulation"
             >
               Cancel
             </button>
@@ -953,8 +1028,8 @@ export default function TransactionModal({
               type="submit"
               className={`flex-2 min-h-[50px] py-3 px-6 rounded-2xl text-white text-sm font-extrabold shadow-md touch-manipulation transition active:scale-[0.98] ${
                 entryMode === 'upcoming'
-                  ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
-                  : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-indigo-600 hover:bg-indigo-700 dark:bg-emerald-600 dark:hover:bg-emerald-700'
               }`}
             >
               {editingPending

@@ -14,13 +14,15 @@ import {
   Edit3,
   LayoutDashboard,
   MessageSquareText,
+  Moon,
+  PieChart,
   Plus,
   Scale,
   Search,
-  Settings,
   Share2,
   SlidersHorizontal,
   Sparkles,
+  Sun,
   Trash2,
   Users,
   X
@@ -36,34 +38,44 @@ import UpcomingSection from './components/UpcomingSection.jsx';
 import TransactionModal from './components/TransactionModal.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import PendingSection from './components/PendingSection.jsx';
+import BudgetsView from './components/BudgetsView.jsx';
 import { AccountsManagerModal, TransferModal } from './components/AccountsManagerModal.jsx';
 import { LaunchSplashScreen, SmartLedgerLogo } from './components/SmartLedgerLogo.jsx';
 import {
   DEFAULT_APPEARANCE_PREFS,
   DEFAULT_CATEGORIES,
+  DEFAULT_CURRENCIES,
   DEFAULT_PEOPLE,
   DEFAULT_SECTIONS,
   DEFAULT_SHARING_PREFS,
+  DEFAULT_USER_PROFILE,
   LEGACY_STORAGE_KEY,
   STORAGE_KEY,
+  THEME_STORAGE_KEY,
   buildDemoData,
   computeAccountBalances,
   computeAllTimeWalletTotals,
   computeDebtItems,
   computeEqualShares,
   computeFinancialSummary,
+  computeHierarchicalBudgets,
   computePercentageShares,
   confirmUpcomingTransaction,
   formatCompact,
   formatMoney,
+  getCurrencyAccent,
+  getCurrencyMeta,
   getCurrentYearMonth,
   getDefaultAccountIdForCurrency,
   getEffectiveShares,
   getTodayStr,
   normalizeAccountsList,
   normalizeAppearancePrefs,
+  normalizeBudgets,
+  normalizeCurrenciesList,
   normalizePeopleList,
   normalizeSharingPrefs,
+  normalizeUserProfile,
   pad2,
   round2
 } from './utils/financeEngine.js';
@@ -82,8 +94,16 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+function getInitialsFromName(name) {
+  const cleaned = String(name || '').trim();
+  if (!cleaned) return 'SL';
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export default function App() {
-  // Inject Android PWA Manifest, Theme Color & Mobile Viewport Ergonomics on Mount
+  // Inject Android PWA Manifest & Mobile Viewport Ergonomics on Mount (theme-agnostic)
   useEffect(() => {
     const ensureMeta = (name, content) => {
       let el = document.querySelector(`meta[name="${name}"]`);
@@ -95,7 +115,6 @@ export default function App() {
       el.setAttribute('content', content);
     };
 
-    ensureMeta('theme-color', '#0f172a');
     ensureMeta('mobile-web-app-capable', 'yes');
     ensureMeta('apple-mobile-web-app-capable', 'yes');
     ensureMeta('apple-mobile-web-app-status-bar-style', 'black-translucent');
@@ -113,17 +132,17 @@ export default function App() {
       document.head.appendChild(styleEl);
     }
 
-    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="24" fill="#0f172a"/><rect x="20" y="18" width="60" height="32" rx="9" fill="#10b981"/><rect x="16" y="33" width="68" height="48" rx="12" fill="#f8fafc"/><rect x="56" y="47" width="28" height="20" rx="10" fill="#059669"/><circle cx="66" cy="57" r="4.2" fill="#ecfdf5"/></svg>`;
+    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none"><rect width="100" height="100" fill="#090d16"/><path d="M31 36V31C31 27.96 33.46 25.5 36.5 25.5H63.5C66.54 25.5 69 27.96 69 31V36H31Z" fill="#f59e0b"/><rect x="30" y="33.2" width="40" height="2.4" fill="#090d16"/><rect x="24" y="35" width="52" height="39" rx="8" fill="#0d2e29" stroke="#10b981" stroke-width="2.6"/><path d="M32.6 60H34C34.88 60 35.6 60.72 35.6 61.6V67.5H31V61.6C31 60.72 31.72 60 32.6 60Z" fill="#059669"/><path d="M40.1 55H41.5C42.38 55 43.1 55.72 43.1 56.6V67.5H38.5V56.6C38.5 55.72 39.22 55 40.1 55Z" fill="#10b981"/><path d="M47.6 49.5H49C49.88 49.5 50.6 50.22 50.6 51.1V67.5H46V51.1C46 50.22 46.72 49.5 47.6 49.5Z" fill="#34d399"/><path d="M31.2 53.5L39.4 47.2L44.4 50.4L54.6 40.8" stroke="#fcd34d" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M49 40.6H55V46.6" stroke="#fde68a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M65.8 48.5H76.6V61.5H65.8C62.21 61.5 59.3 58.59 59.3 55C59.3 51.41 62.21 48.5 65.8 48.5Z" fill="#10b981"/><circle cx="66.2" cy="55" r="3.1" fill="#fde68a"/></svg>`;
     const iconUrl = `data:image/svg+xml;base64,${btoa(iconSvg)}`;
     const manifestObj = {
       name: 'SmartLedger — Personal & Shared Finance',
       short_name: 'SmartLedger',
-      description: 'Dual-currency AED & EGP personal finance, multi-account cards, and Bank SMS ledger',
+      description: 'Multi-currency personal finance, hierarchical budgets, multi-account cards, and Bank SMS ledger',
       start_url: '.',
       display: 'standalone',
       orientation: 'portrait',
-      background_color: '#0f172a',
-      theme_color: '#0f172a',
+      background_color: '#090d16',
+      theme_color: '#090d16',
       icons: [
         { src: iconUrl, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
         { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
@@ -147,8 +166,16 @@ export default function App() {
     };
   }, []);
 
-  // Load persisted state (backward-compatible with v1, v2 & v3 schemas)
+  // Load persisted state (backward-compatible with v1, v2, v3 & v4 schemas)
   const loadInitialState = () => {
+    let savedTheme = null;
+    try {
+      const t = localStorage.getItem(THEME_STORAGE_KEY);
+      if (t === 'dark' || t === 'light' || t === 'system') savedTheme = t;
+    } catch {
+      savedTheme = null;
+    }
+
     try {
       const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
       if (raw) {
@@ -167,11 +194,30 @@ export default function App() {
             ? standalonePending
             : [];
 
+          const currencies = normalizeCurrenciesList(parsed.currencies, [
+            ...(parsed.accounts || []),
+            ...(parsed.transactions || []),
+            ...(parsed.settlements || []),
+            ...(parsed.upcomingTransactions || []),
+            ...pendingList
+          ]);
+          const primaryCurrency = currencies.some((c) => c.code === parsed.primaryCurrency)
+            ? parsed.primaryCurrency
+            : 'AED';
+          const normalizedAppearance = normalizeAppearancePrefs(parsed.appearancePrefs);
+          if (savedTheme && !parsed.appearancePrefs?.theme) {
+            normalizedAppearance.theme = savedTheme;
+          }
+
           return {
+            currencies,
+            primaryCurrency,
+            budgets: normalizeBudgets(parsed.budgets),
+            userProfile: normalizeUserProfile(parsed.userProfile),
             people: normalizePeopleList(parsed.people),
             sections: parsed.sections || DEFAULT_SECTIONS,
             categories: parsed.categories || DEFAULT_CATEGORIES,
-            accounts: normalizeAccountsList(parsed.accounts),
+            accounts: normalizeAccountsList(parsed.accounts, currencies),
             accountTransfers: Array.isArray(parsed.accountTransfers) ? parsed.accountTransfers : [],
             transactions: parsed.transactions || [],
             settlements: parsed.settlements || [],
@@ -183,7 +229,7 @@ export default function App() {
               ? parsed.dismissedSmsSignatures
               : [],
             defaultSharing: normalizeSharingPrefs(parsed.defaultSharing),
-            appearancePrefs: normalizeAppearancePrefs(parsed.appearancePrefs),
+            appearancePrefs: normalizedAppearance,
             exchangeRate: parsed.exchangeRate || 13.55
           };
         }
@@ -191,8 +237,13 @@ export default function App() {
     } catch (e) {
       console.error('Failed to load state from localStorage:', e);
     }
+
     const demo = buildDemoData();
     return {
+      currencies: DEFAULT_CURRENCIES.map((c) => ({ ...c })),
+      primaryCurrency: 'AED',
+      budgets: demo.budgets || {},
+      userProfile: { ...DEFAULT_USER_PROFILE },
       people: DEFAULT_PEOPLE,
       sections: DEFAULT_SECTIONS,
       categories: DEFAULT_CATEGORIES,
@@ -204,7 +255,10 @@ export default function App() {
       pendingTransactions: demo.pendingTransactions,
       dismissedSmsSignatures: [],
       defaultSharing: { ...DEFAULT_SHARING_PREFS, categoryRules: {} },
-      appearancePrefs: { ...DEFAULT_APPEARANCE_PREFS },
+      appearancePrefs: {
+        ...DEFAULT_APPEARANCE_PREFS,
+        theme: savedTheme || DEFAULT_APPEARANCE_PREFS.theme
+      },
       exchangeRate: 13.55
     };
   };
@@ -212,6 +266,10 @@ export default function App() {
   const initial = useMemo(() => loadInitialState(), []);
 
   // Core Persistent State
+  const [currencies, setCurrencies] = useState(initial.currencies);
+  const [primaryCurrency, setPrimaryCurrency] = useState(initial.primaryCurrency);
+  const [budgets, setBudgets] = useState(initial.budgets);
+  const [userProfile, setUserProfile] = useState(initial.userProfile);
   const [people, setPeople] = useState(initial.people);
   const [sections, setSections] = useState(initial.sections);
   const [categories, setCategories] = useState(initial.categories);
@@ -228,7 +286,48 @@ export default function App() {
   const [appearancePrefs, setAppearancePrefs] = useState(initial.appearancePrefs);
   const [exchangeRate, setExchangeRate] = useState(initial.exchangeRate);
 
-  // Launch Splash Screen (skips when ?autostart=1 or disabled in Branding settings)
+  // Full Light Mode / Dark Mode / System Default Sync
+  const [systemPrefersDark, setSystemPrefersDark] = useState(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return true;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => setSystemPrefersDark(e.matches);
+    media.addEventListener('change', handler);
+    return () => media.removeEventListener('change', handler);
+  }, []);
+
+  const themeSetting = appearancePrefs?.theme || 'dark';
+  const isDarkMode = themeSetting === 'system' ? systemPrefersDark : themeSetting === 'dark';
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', isDarkMode);
+    root.style.colorScheme = isDarkMode ? 'dark' : 'light';
+    const bgHex = isDarkMode ? '#090d16' : '#f8fafc';
+    let themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (!themeMeta) {
+      themeMeta = document.createElement('meta');
+      themeMeta.setAttribute('name', 'theme-color');
+      document.head.appendChild(themeMeta);
+    }
+    themeMeta.setAttribute('content', bgHex);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, themeSetting);
+    } catch {
+      // ignore storage errors
+    }
+  }, [isDarkMode, themeSetting]);
+
+  const handleQuickToggleTheme = () => {
+    const nextTheme = isDarkMode ? 'light' : 'dark';
+    setAppearancePrefs((prev) => ({ ...prev, theme: nextTheme }));
+  };
+
+  // Launch Splash Screen (skips when ?autostart=1 or disabled in Appearance settings)
   const [splashVisible, setSplashVisible] = useState(() => {
     if (typeof window !== 'undefined' && window.location.search.includes('autostart=1')) {
       return false;
@@ -257,7 +356,7 @@ export default function App() {
   const [settlementModalItem, setSettlementModalItem] = useState(null);
   const [accountsModalOpen, setAccountsModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
-  const [transferInitialCurrency, setTransferInitialCurrency] = useState('AED');
+  const [transferInitialCurrency, setTransferInitialCurrency] = useState(primaryCurrency || 'AED');
   const [toast, setToast] = useState(null);
 
   const showToast = useCallback((message, type = 'success') => {
@@ -270,14 +369,18 @@ export default function App() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Auto-save to localStorage (including standalone pendingTransactions mirror)
+  // Auto-save to localStorage (schemaVersion 4 + standalone pendingTransactions mirror)
   useEffect(() => {
     try {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
-          schemaVersion: 3,
+          schemaVersion: 4,
           updatedAt: new Date().toISOString(),
+          currencies,
+          primaryCurrency,
+          budgets,
+          userProfile,
           people,
           sections,
           categories,
@@ -298,6 +401,10 @@ export default function App() {
       console.error('Failed to persist state:', e);
     }
   }, [
+    currencies,
+    primaryCurrency,
+    budgets,
+    userProfile,
     people,
     sections,
     categories,
@@ -342,17 +449,18 @@ export default function App() {
         const found = accounts.find((a) => a.id === id);
         if (found) return found;
       }
-      const fallbackId = getDefaultAccountIdForCurrency(accounts, currency || 'AED');
+      const cur = currency || primaryCurrency || 'AED';
+      const fallbackId = getDefaultAccountIdForCurrency(accounts, cur);
       return (
         accounts.find((a) => a.id === fallbackId) || {
           id: fallbackId,
-          name: currency === 'EGP' ? 'Cash EGP' : 'Cash AED',
+          name: `Cash ${cur}`,
           last4: '',
-          currency: currency || 'AED'
+          currency: cur
         }
       );
     },
-    [accounts]
+    [accounts, primaryCurrency]
   );
 
   const hasDemoData = useMemo(
@@ -444,8 +552,8 @@ export default function App() {
   );
 
   const financialSummary = useMemo(
-    () => computeFinancialSummary(periodTransactions, periodSettlements, allDebtItems),
-    [periodTransactions, periodSettlements, allDebtItems]
+    () => computeFinancialSummary(periodTransactions, periodSettlements, allDebtItems, currencies),
+    [periodTransactions, periodSettlements, allDebtItems, currencies]
   );
 
   const accountBalanceMap = useMemo(
@@ -454,8 +562,20 @@ export default function App() {
   );
 
   const allTimeWalletTotals = useMemo(
-    () => computeAllTimeWalletTotals(accounts, accountBalanceMap),
-    [accounts, accountBalanceMap]
+    () => computeAllTimeWalletTotals(accounts, accountBalanceMap, currencies),
+    [accounts, accountBalanceMap, currencies]
+  );
+
+  const dashboardBudgetSummary = useMemo(
+    () =>
+      computeHierarchicalBudgets({
+        sections,
+        categories,
+        budgets,
+        periodTransactions,
+        currency: primaryCurrency
+      }),
+    [sections, categories, budgets, periodTransactions, primaryCurrency]
   );
 
   // ============================================================================
@@ -465,6 +585,7 @@ export default function App() {
   const smsStateRef = useRef({
     accounts,
     categories,
+    currencies,
     defaultSharing,
     people,
     pendingTransactions,
@@ -476,6 +597,7 @@ export default function App() {
     smsStateRef.current = {
       accounts,
       categories,
+      currencies,
       defaultSharing,
       people,
       pendingTransactions,
@@ -485,6 +607,7 @@ export default function App() {
   }, [
     accounts,
     categories,
+    currencies,
     defaultSharing,
     people,
     pendingTransactions,
@@ -506,6 +629,7 @@ export default function App() {
         categories: ctx.categories,
         defaultSharing: ctx.defaultSharing,
         people: ctx.people,
+        currencies: ctx.currencies,
         existingPending: ctx.pendingTransactions,
         knownSignatures
       });
@@ -782,7 +906,7 @@ export default function App() {
             ? 'shared'
             : pendingItem.belongsTo || 'me'
           : 'me',
-      splitMode: pendingItem.type === 'expense' && pendingItem.isShared ? 'equal' : 'equal',
+      splitMode: 'equal',
       shares,
       notes: `Imported from ${pendingItem.bankName || pendingItem.sender} SMS`,
       smsSignature: pendingItem.signature || '',
@@ -1009,36 +1133,48 @@ export default function App() {
     showToast('Settlement entry removed');
   };
 
+  const profileInitials = getInitialsFromName(userProfile?.displayName);
+  const currencySubtitle = currencies
+    .slice(0, 3)
+    .map((c) => c.code)
+    .join(' · ') + (currencies.length > 3 ? ` +${currencies.length - 3}` : '');
+
   return (
-    <div className="min-h-[100dvh] bg-slate-50 text-slate-900 pb-[calc(6.25rem+env(safe-area-inset-bottom))] font-sans selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-[100dvh] bg-slate-50 dark:bg-[#090d16] text-slate-900 dark:text-slate-100 pb-[calc(6.5rem+env(safe-area-inset-bottom))] font-sans selection:bg-emerald-100 selection:text-emerald-900 dark:selection:bg-emerald-900/50 dark:selection:text-emerald-100 transition-colors duration-200">
       <LaunchSplashScreen enabled={splashVisible} onComplete={handleSplashComplete} />
       <ToastNotification toast={toast} onClose={() => setToast(null)} />
 
-      {/* ANDROID TOP APP BAR WITH SAFE AREA TOP */}
-      <header className="sticky top-0 z-30 bg-slate-900 text-white pt-[env(safe-area-inset-top)] shadow-md">
-        <div className="max-w-lg md:max-w-3xl mx-auto px-3.5 h-15 flex items-center justify-between gap-1.5">
+      {/* TOP APP BAR WITH DUAL THEME, QUICK THEME TOGGLE & USER PROFILE AVATAR */}
+      <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#090d16]/95 backdrop-blur-md text-slate-900 dark:text-white pt-[env(safe-area-inset-top)] shadow-xs dark:shadow-md border-b border-slate-200/90 dark:border-slate-800/80 transition-colors">
+        <div className="max-w-lg md:max-w-3xl mx-auto px-3 h-15 flex items-center justify-between gap-1.5">
           <button
             type="button"
             onClick={() => setActiveTab('dashboard')}
-            className="flex items-center gap-2 min-h-[48px] text-left touch-manipulation active:scale-[0.97] transition shrink-0"
+            className="flex items-center gap-2 min-h-[44px] text-left touch-manipulation active:scale-[0.97] transition shrink-0"
           >
-            <SmartLedgerLogo size={36} className="shrink-0 shadow-sm" />
+            <SmartLedgerLogo
+              size={36}
+              className="shrink-0 ring-1 ring-emerald-500/30 shadow-xs"
+            />
             <div className="hidden sm:block">
-              <h1 className="text-sm font-extrabold tracking-tight text-white leading-none">
+              <h1 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">
                 SmartLedger
               </h1>
-              <p className="text-[10px] font-semibold text-emerald-400 mt-0.5">AED · EGP Ledger</p>
+              <p className="text-[10px] font-bold text-emerald-700 dark:text-amber-300 mt-0.5">
+                {currencySubtitle}
+              </p>
             </div>
           </button>
 
-          <div className="flex items-center bg-slate-800 rounded-2xl p-0.5 border border-slate-700/80 select-none">
+          {/* Period Selector */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-2xl p-0.5 border border-slate-200/90 dark:border-slate-700/80 select-none">
             <button
               type="button"
               onClick={handlePrevPeriod}
               aria-label="Previous Period"
-              className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl text-slate-300 hover:bg-slate-700 hover:text-white active:scale-95 touch-manipulation transition"
+              className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white active:scale-95 touch-manipulation transition"
             >
-              <ChevronLeft size={19} />
+              <ChevronLeft size={18} />
             </button>
             <button
               type="button"
@@ -1048,7 +1184,7 @@ export default function App() {
                 )
               }
               title="Tap to cycle: Month → Annual → All-Time"
-              className="min-h-[40px] px-2 text-xs sm:text-sm font-extrabold text-white min-w-[92px] sm:min-w-[120px] text-center hover:text-emerald-300 active:scale-95 touch-manipulation transition"
+              className="min-h-[36px] px-1.5 sm:px-2 text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white min-w-[78px] sm:min-w-[110px] text-center hover:text-emerald-600 dark:hover:text-emerald-300 active:scale-95 touch-manipulation transition whitespace-nowrap"
             >
               {periodLabel}
             </button>
@@ -1056,21 +1192,33 @@ export default function App() {
               type="button"
               onClick={handleNextPeriod}
               aria-label="Next Period"
-              className="w-10 h-10 sm:w-11 sm:h-11 flex items-center justify-center rounded-xl text-slate-300 hover:bg-slate-700 hover:text-white active:scale-95 touch-manipulation transition"
+              className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center rounded-xl text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white active:scale-95 touch-manipulation transition"
             >
-              <ChevronRight size={19} />
+              <ChevronRight size={18} />
             </button>
           </div>
 
+          {/* Right Action Cluster: Theme Toggle + Pending SMS + Profile Avatar */}
           <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              data-testid="header-theme-toggle"
+              onClick={handleQuickToggleTheme}
+              aria-label={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              className="w-10 h-10 rounded-2xl flex items-center justify-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-amber-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition touch-manipulation active:scale-95"
+            >
+              {isDarkMode ? <Sun size={17} /> : <Moon size={17} />}
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveTab('transactions')}
               aria-label={`Pending Bank SMS (${pendingTransactions.length})`}
               title="Pending Bank SMS Queue"
-              className="relative w-11 h-11 rounded-2xl flex items-center justify-center bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 transition touch-manipulation active:scale-95"
+              className="relative w-10 h-10 rounded-2xl flex items-center justify-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition touch-manipulation active:scale-95"
             >
-              <MessageSquareText size={18} />
+              <MessageSquareText size={17} />
               {pendingTransactions.length > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-slate-950 text-[10px] font-extrabold flex items-center justify-center">
                   {pendingTransactions.length}
@@ -1080,15 +1228,27 @@ export default function App() {
 
             <button
               type="button"
+              data-testid="header-profile-button"
               onClick={() => setActiveTab('settings')}
-              aria-label="Settings & Backup"
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center border transition touch-manipulation active:scale-95 ${
+              aria-label="User Profile & Settings"
+              title={`${userProfile?.displayName || 'Profile'} — Settings`}
+              className={`w-10 h-10 rounded-2xl overflow-hidden flex items-center justify-center border-2 transition touch-manipulation active:scale-95 shrink-0 ${
                 activeTab === 'settings'
-                  ? 'bg-emerald-600 border-emerald-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700'
+                  ? 'border-emerald-500 ring-2 ring-emerald-500/30'
+                  : 'border-slate-200 dark:border-slate-700 hover:border-emerald-400'
               }`}
             >
-              <Settings size={19} />
+              {userProfile?.avatarDataUrl ? (
+                <img
+                  src={userProfile.avatarDataUrl}
+                  alt={userProfile.displayName || 'Profile'}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="w-full h-full bg-gradient-to-br from-emerald-600 to-teal-700 text-white text-xs font-extrabold flex items-center justify-center">
+                  {profileInitials}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -1096,11 +1256,11 @@ export default function App() {
 
       <main className="max-w-lg md:max-w-3xl mx-auto px-3.5 pt-4">
         {hasDemoData && (
-          <div className="mb-4 p-3.5 rounded-2xl bg-indigo-50 border border-indigo-200/90 flex items-center justify-between gap-3">
+          <div className="mb-4 p-3.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200/90 dark:border-indigo-800/70 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <Sparkles size={18} className="text-indigo-600 shrink-0" />
-              <p className="text-xs font-semibold text-indigo-950 leading-snug">
-                Sample AED &amp; EGP records are loaded so you can explore multi-account wallets, SMS queue &amp; splits.
+              <Sparkles size={18} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
+              <p className="text-xs font-semibold text-indigo-950 dark:text-indigo-100 leading-snug">
+                Sample AED &amp; EGP records are loaded so you can explore wallets, hierarchical budgets, SMS queue &amp; splits.
               </p>
             </div>
             <button
@@ -1115,8 +1275,11 @@ export default function App() {
 
         {activeTab === 'dashboard' && (
           <DashboardView
+            currencies={currencies}
+            primaryCurrency={primaryCurrency}
             summary={financialSummary}
             allTimeWalletTotals={allTimeWalletTotals}
+            dashboardBudgetSummary={dashboardBudgetSummary}
             accounts={accounts}
             accountBalanceMap={accountBalanceMap}
             pendingTransactions={pendingTransactions}
@@ -1135,7 +1298,7 @@ export default function App() {
             onDeleteUpcoming={handleDeleteUpcoming}
             onConfirmUpcoming={handleConfirmUpcoming}
             onOpenAccountsModal={() => setAccountsModalOpen(true)}
-            onOpenTransferModal={(cur = 'AED') => {
+            onOpenTransferModal={(cur = primaryCurrency) => {
               setTransferInitialCurrency(cur);
               setTransferModalOpen(true);
             }}
@@ -1156,6 +1319,7 @@ export default function App() {
 
         {activeTab === 'transactions' && (
           <TransactionsView
+            currencies={currencies}
             transactions={periodTransactions}
             upcomingTransactions={upcomingTransactions}
             pendingTransactions={pendingTransactions}
@@ -1186,8 +1350,23 @@ export default function App() {
           />
         )}
 
+        {activeTab === 'budgets' && (
+          <BudgetsView
+            sections={sections}
+            categories={categories}
+            budgets={budgets}
+            setBudgets={setBudgets}
+            periodTransactions={periodTransactions}
+            periodLabel={periodLabel}
+            currencies={currencies}
+            primaryCurrency={primaryCurrency}
+            showToast={showToast}
+          />
+        )}
+
         {activeTab === 'shared' && (
           <SharedExpensesView
+            currencies={currencies}
             transactions={periodTransactions.filter(
               (t) =>
                 t.type === 'expense' &&
@@ -1207,6 +1386,7 @@ export default function App() {
 
         {activeTab === 'balances' && (
           <BalancesView
+            currencies={currencies}
             allDebtItems={allDebtItems}
             people={people}
             getPerson={getPerson}
@@ -1219,6 +1399,8 @@ export default function App() {
 
         {activeTab === 'reports' && (
           <ReportsView
+            currencies={currencies}
+            primaryCurrency={primaryCurrency}
             transactions={transactions}
             periodTransactions={periodTransactions}
             summary={financialSummary}
@@ -1235,6 +1417,14 @@ export default function App() {
 
         {activeTab === 'settings' && (
           <SettingsView
+            currencies={currencies}
+            setCurrencies={setCurrencies}
+            primaryCurrency={primaryCurrency}
+            setPrimaryCurrency={setPrimaryCurrency}
+            budgets={budgets}
+            setBudgets={setBudgets}
+            userProfile={userProfile}
+            setUserProfile={setUserProfile}
             people={people}
             setPeople={setPeople}
             sections={sections}
@@ -1266,7 +1456,7 @@ export default function App() {
             exchangeRate={exchangeRate}
             setExchangeRate={setExchangeRate}
             onOpenTransfer={() => {
-              setTransferInitialCurrency('AED');
+              setTransferInitialCurrency(primaryCurrency || 'AED');
               setTransferModalOpen(true);
             }}
             showToast={showToast}
@@ -1279,21 +1469,22 @@ export default function App() {
         type="button"
         onClick={() => openQuickAdd('expense', activeTab === 'shared', 'posted')}
         aria-label="Quick Add Transaction"
-        className="fixed z-30 right-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] h-14 px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-sm shadow-xl shadow-indigo-600/35 flex items-center gap-2 touch-manipulation select-none transition-transform"
+        className="fixed z-30 right-4 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] h-13 px-4 sm:px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-extrabold text-xs sm:text-sm shadow-xl shadow-indigo-600/35 flex items-center gap-1.5 touch-manipulation select-none transition-transform"
       >
-        <Plus size={22} strokeWidth={2.75} />
+        <Plus size={20} strokeWidth={2.75} />
         <span>Quick Add</span>
       </button>
 
-      {/* BOTTOM NAVIGATION BAR */}
+      {/* 6-TAB BOTTOM NAVIGATION BAR (COMPACT SINGLE-LINE MOBILE FIT) */}
       <nav
         aria-label="Main navigation"
-        className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.05)] select-none"
+        className="fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0b1120]/95 backdrop-blur-md border-t border-slate-200/90 dark:border-slate-800/90 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.35)] select-none"
       >
-        <div className="max-w-lg md:max-w-3xl mx-auto px-1 h-17 flex items-center justify-around">
+        <div className="max-w-lg md:max-w-3xl mx-auto px-1 h-16 flex items-center justify-around">
           {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
+            { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+            { id: 'transactions', label: 'Activity', icon: ArrowLeftRight },
+            { id: 'budgets', label: 'Budgets', icon: PieChart },
             { id: 'shared', label: 'Shared', icon: Users },
             { id: 'balances', label: 'Balances', icon: Scale },
             { id: 'reports', label: 'Reports', icon: BarChart3 }
@@ -1305,25 +1496,30 @@ export default function App() {
               <button
                 key={tab.id}
                 type="button"
+                data-testid={`nav-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center justify-center flex-1 min-h-[54px] py-1 rounded-2xl transition-all touch-manipulation active:scale-95 ${
-                  isActive ? 'text-indigo-700' : 'text-slate-500 hover:text-slate-800'
+                className={`flex flex-col items-center justify-center flex-1 min-w-0 min-h-[52px] py-1 px-0.5 rounded-2xl transition-all touch-manipulation active:scale-95 ${
+                  isActive
+                    ? 'text-indigo-700 dark:text-emerald-400'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
                 }`}
               >
                 <div
-                  className={`relative px-3.5 py-1 rounded-full transition-all ${
-                    isActive ? 'bg-indigo-100 text-indigo-700' : ''
+                  className={`relative px-2.5 sm:px-3.5 py-1 rounded-full transition-all ${
+                    isActive
+                      ? 'bg-indigo-100 dark:bg-emerald-950/70 text-indigo-700 dark:text-emerald-400'
+                      : ''
                   }`}
                 >
-                  <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                  <Icon size={19} strokeWidth={isActive ? 2.5 : 2} />
                   {badgeCount > 0 && (
-                    <span className="absolute -top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-slate-950 text-[9px] font-extrabold flex items-center justify-center">
+                    <span className="absolute -top-0.5 right-0 min-w-[15px] h-[15px] px-1 rounded-full bg-amber-500 text-slate-950 text-[9px] font-extrabold flex items-center justify-center">
                       {badgeCount}
                     </span>
                   )}
                 </div>
                 <span
-                  className={`text-[10px] sm:text-[11px] mt-0.5 ${
+                  className={`text-[10px] mt-0.5 whitespace-nowrap ${
                     isActive ? 'font-extrabold' : 'font-semibold'
                   }`}
                 >
@@ -1346,6 +1542,8 @@ export default function App() {
           sections={sections}
           categories={categories}
           accounts={accounts}
+          currencies={currencies}
+          primaryCurrency={primaryCurrency}
           defaultSharing={defaultSharing}
           onClose={() => {
             setTxModalOpen(false);
@@ -1373,9 +1571,11 @@ export default function App() {
           setUpcomingTransactions={setUpcomingTransactions}
           accountTransfers={accountTransfers}
           setAccountTransfers={setAccountTransfers}
+          currencies={currencies}
+          primaryCurrency={primaryCurrency}
           onOpenTransfer={() => {
             setAccountsModalOpen(false);
-            setTransferInitialCurrency('AED');
+            setTransferInitialCurrency(primaryCurrency || 'AED');
             setTransferModalOpen(true);
           }}
           onClose={() => setAccountsModalOpen(false)}
@@ -1387,6 +1587,7 @@ export default function App() {
       {transferModalOpen && (
         <TransferModal
           accounts={accounts}
+          currencies={currencies}
           initialCurrency={transferInitialCurrency}
           onClose={() => setTransferModalOpen(false)}
           onSaveTransfer={handleSaveTransfer}
@@ -1412,8 +1613,11 @@ export default function App() {
 // ============================================================================
 
 function DashboardView({
+  currencies,
+  primaryCurrency,
   summary,
   allTimeWalletTotals,
+  dashboardBudgetSummary,
   accounts,
   accountBalanceMap,
   pendingTransactions,
@@ -1447,35 +1651,57 @@ function DashboardView({
   setExchangeRate
 }) {
   const [converterAmount, setConverterAmount] = useState('1000');
-  const [converterDir, setConverterDir] = useState('AED_TO_EGP');
+  const [converterFrom, setConverterFrom] = useState('AED');
+  const [converterTo, setConverterTo] = useState('EGP');
+
+  const validFrom = currencies.some((c) => c.code === converterFrom)
+    ? converterFrom
+    : currencies[0]?.code || 'AED';
+  const validTo = currencies.some((c) => c.code === converterTo && c.code !== validFrom)
+    ? converterTo
+    : currencies.find((c) => c.code !== validFrom)?.code || 'EGP';
 
   const convertedPreview = useMemo(() => {
     const num = parseFloat(converterAmount) || 0;
     const rate = parseFloat(exchangeRate) || 1;
-    if (converterDir === 'AED_TO_EGP') {
-      return `${round2(num * rate).toLocaleString()} EGP`;
+    return `${round2(num * rate).toLocaleString()} ${validTo}`;
+  }, [converterAmount, exchangeRate, validTo]);
+
+  const handleSwapConverter = () => {
+    const prevRate = parseFloat(exchangeRate) || 1;
+    setConverterFrom(validTo);
+    setConverterTo(validFrom);
+    if (prevRate > 0) {
+      setExchangeRate(String(round2(1 / prevRate)));
     }
-    return `${round2(num / rate).toLocaleString()} AED`;
-  }, [converterAmount, exchangeRate, converterDir]);
+  };
+
+  const budgetBarTone =
+    dashboardBudgetSummary.overallStatus === 'over'
+      ? 'bg-rose-500'
+      : dashboardBudgetSummary.overallStatus === 'warning'
+      ? 'bg-amber-500'
+      : 'bg-emerald-500';
+  const budgetBarPct = Math.min(100, Math.round(dashboardBudgetSummary.overallPercentUsed || 0));
 
   return (
     <div className="space-y-4">
-      {/* SECTION A: TRUE ALL-TIME WALLET & ACCOUNT BALANCES (PERIOD-INDEPENDENT) */}
+      {/* SECTION A: TRUE ALL-TIME WALLET & ACCOUNT BALANCES (DYNAMIC MULTI-CURRENCY) */}
       <section data-testid="all-time-wallets-section" className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-slate-900">
+            <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-slate-100">
               All-Time Wallet Balances
             </h2>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
               True cumulative Cash, Cards &amp; Banks across all time
             </p>
           </div>
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => onOpenTransferModal('AED')}
-              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95"
+              onClick={() => onOpenTransferModal(primaryCurrency)}
+              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-emerald-600 hover:bg-slate-800 dark:hover:bg-emerald-700 text-white text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95"
             >
               <ArrowRightLeft size={14} />
               <span>Transfer</span>
@@ -1483,7 +1709,7 @@ function DashboardView({
             <button
               type="button"
               onClick={onOpenAccountsModal}
-              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-200 text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95"
+              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white dark:bg-[#111827] hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-extrabold flex items-center gap-1.5 touch-manipulation active:scale-95"
             >
               <SlidersHorizontal size={14} />
               <span>Accounts</span>
@@ -1492,36 +1718,33 @@ function DashboardView({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {['AED', 'EGP'].map((cur) => {
-            const isAED = cur === 'AED';
-            const wallet = allTimeWalletTotals[cur];
+          {currencies.map((curObj, idx) => {
+            const cur = curObj.code;
+            const wallet = allTimeWalletTotals[cur] || { totalBalance: 0, accountCount: 0 };
             const curAccounts = accounts.filter((a) => a.currency === cur);
+            const accent = getCurrencyAccent(cur, idx);
 
             return (
               <div
                 key={cur}
                 data-testid={`wallet-card-${cur}`}
-                className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs overflow-hidden flex flex-col"
+                className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xs overflow-hidden flex flex-col"
               >
                 <div
-                  className={`px-5 py-4 flex items-center justify-between text-white ${
-                    isAED
-                      ? 'bg-gradient-to-r from-indigo-600 to-blue-600'
-                      : 'bg-gradient-to-r from-emerald-600 to-teal-600'
-                  }`}
+                  className={`px-5 py-4 flex items-center justify-between text-white bg-gradient-to-r ${accent.gradient}`}
                 >
                   <div>
                     <span className="text-[11px] font-bold uppercase tracking-wider opacity-90">
-                      {isAED ? 'UAE Dirham Wallet' : 'Egyptian Pound Wallet'}
+                      {curObj.name} Wallet
                     </span>
                     <div
                       data-testid={`all-time-total-${cur}`}
-                      className="text-2xl font-extrabold tracking-tight mt-0.5"
+                      className="text-2xl font-extrabold tracking-tight tabular-nums mt-0.5"
                     >
                       {formatMoney(wallet.totalBalance, cur)}
                     </div>
                     <span className="text-[11px] opacity-85">
-                      True Cumulative Total · {wallet.accountCount} accounts
+                      True Cumulative Total · {wallet.accountCount} account{wallet.accountCount === 1 ? '' : 's'}
                     </span>
                   </div>
                   <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-xs flex items-center justify-center font-extrabold text-sm shrink-0">
@@ -1530,46 +1753,58 @@ function DashboardView({
                 </div>
 
                 {/* Per-Account Mini-Cards */}
-                <div className="p-3 bg-slate-50/70 space-y-1.5 flex-1">
+                <div className="p-3 bg-slate-50/70 dark:bg-slate-900/60 space-y-1.5 flex-1">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                       Accounts &amp; Cards Breakdown
                     </span>
                     <button
                       type="button"
                       onClick={onOpenAccountsModal}
-                      className="text-[11px] font-extrabold text-indigo-600 hover:underline"
+                      className="text-[11px] font-extrabold text-indigo-600 dark:text-emerald-400 hover:underline"
                     >
                       Edit Balances
                     </button>
                   </div>
-                  <div className="grid grid-cols-1 gap-1.5">
-                    {curAccounts.map((acc) => {
-                      const bal = accountBalanceMap[acc.id]?.balance ?? acc.startingBalance ?? 0;
-                      return (
-                        <button
-                          key={acc.id}
-                          type="button"
-                          onClick={onOpenAccountsModal}
-                          className="w-full text-left px-3 py-2 rounded-2xl bg-white border border-slate-200/80 hover:border-indigo-300 flex items-center justify-between gap-2 transition touch-manipulation"
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs font-bold text-slate-800 truncate">
-                              {acc.name}
-                            </span>
-                            {acc.last4 && (
-                              <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
-                                ••{acc.last4}
+
+                  {curAccounts.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={onOpenAccountsModal}
+                      className="w-full min-h-[42px] px-3 py-2 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 flex items-center justify-center gap-1.5 transition touch-manipulation"
+                    >
+                      <Plus size={14} />
+                      <span>Add {cur} Account or Card</span>
+                    </button>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-1.5">
+                      {curAccounts.map((acc) => {
+                        const bal = accountBalanceMap[acc.id]?.balance ?? acc.startingBalance ?? 0;
+                        return (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={onOpenAccountsModal}
+                            className="w-full text-left px-3 py-2 rounded-2xl bg-white dark:bg-[#111827] border border-slate-200/80 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-emerald-600 flex items-center justify-between gap-2 transition touch-manipulation"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {acc.name}
                               </span>
-                            )}
-                          </div>
-                          <span className="text-xs font-extrabold text-slate-900 shrink-0">
-                            {formatMoney(bal, cur)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                              {acc.last4 && (
+                                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                                  ••{acc.last4}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-extrabold tabular-nums text-slate-900 dark:text-slate-100 shrink-0">
+                              {formatMoney(bal, cur)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -1579,18 +1814,18 @@ function DashboardView({
 
       {/* SECTION B: SELECTED PERIOD CASHFLOW ANALYSIS (INCOME VS SPEND) */}
       <section data-testid="period-cashflow-section" className="space-y-3">
-        <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+        <div className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
-              <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-indigo-700 dark:text-emerald-300 bg-indigo-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
                 {periodLabel}
               </span>
-              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1">
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-slate-100 mt-1">
                 Period Cashflow (Income vs. Spend)
               </h2>
             </div>
 
-            <div className="flex gap-1 bg-slate-100 p-1 rounded-xl select-none">
+            <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl select-none">
               {['month', 'year', 'all'].map((mode) => (
                 <button
                   key={mode}
@@ -1598,8 +1833,8 @@ function DashboardView({
                   onClick={() => setPeriodMode(mode)}
                   className={`min-h-[38px] px-2.5 rounded-lg text-xs font-bold capitalize transition touch-manipulation active:scale-95 ${
                     periodMode === mode
-                      ? 'bg-slate-900 text-white shadow-2xs'
-                      : 'text-slate-600 hover:text-slate-900'
+                      ? 'bg-slate-900 dark:bg-emerald-600 text-white shadow-2xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
                   {mode === 'all' ? 'All' : mode}
@@ -1613,7 +1848,7 @@ function DashboardView({
             <button
               type="button"
               onClick={() => onQuickAdd('expense', false, 'posted')}
-              className="min-h-[48px] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 active:scale-[0.97] text-rose-700 font-extrabold text-xs border border-rose-200/80 touch-manipulation select-none transition"
+              className="min-h-[48px] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-950/80 active:scale-[0.97] text-rose-700 dark:text-rose-300 font-extrabold text-xs border border-rose-200/80 dark:border-rose-800/60 touch-manipulation select-none transition"
             >
               <ArrowUpRight size={16} />
               <span>+ Expense</span>
@@ -1621,7 +1856,7 @@ function DashboardView({
             <button
               type="button"
               onClick={() => onQuickAdd('expense', true, 'posted')}
-              className="min-h-[48px] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 active:scale-[0.97] text-indigo-700 font-extrabold text-xs border border-indigo-200/80 touch-manipulation select-none transition"
+              className="min-h-[48px] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-950/80 active:scale-[0.97] text-indigo-700 dark:text-indigo-300 font-extrabold text-xs border border-indigo-200/80 dark:border-indigo-800/60 touch-manipulation select-none transition"
             >
               <Users size={16} />
               <span>+ Shared</span>
@@ -1629,7 +1864,7 @@ function DashboardView({
             <button
               type="button"
               onClick={() => onQuickAdd('income', false, 'posted')}
-              className="min-h-[48px] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 active:scale-[0.97] text-emerald-700 font-extrabold text-xs border border-emerald-200/80 touch-manipulation select-none transition"
+              className="min-h-[48px] flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-950/80 active:scale-[0.97] text-emerald-700 dark:text-emerald-300 font-extrabold text-xs border border-emerald-200/80 dark:border-emerald-800/60 touch-manipulation select-none transition"
             >
               <ArrowDownLeft size={16} />
               <span>+ Income</span>
@@ -1638,8 +1873,18 @@ function DashboardView({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {['AED', 'EGP'].map((cur) => {
-            const data = summary[cur];
+          {currencies.map((curObj) => {
+            const cur = curObj.code;
+            const data = summary[cur] || {
+              personalIncome: 0,
+              settlementsReceived: 0,
+              totalMoneyReceived: 0,
+              totalMyExpenses: 0,
+              totalMoneySpent: 0,
+              remainingBalance: 0,
+              outstandingReceivable: 0,
+              outstandingPayable: 0
+            };
             const flowTotal = data.totalMoneyReceived + data.totalMoneySpent;
             const incRatio =
               flowTotal > 0 ? Math.round((data.totalMoneyReceived / flowTotal) * 100) : 50;
@@ -1649,16 +1894,18 @@ function DashboardView({
               <div
                 key={cur}
                 data-testid={`period-cashflow-${cur}`}
-                className="bg-white rounded-3xl border border-slate-200/90 shadow-2xs p-4 space-y-3"
+                className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xs p-4 space-y-3"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       {cur} · {periodLabel}
                     </span>
                     <div
-                      className={`text-lg font-extrabold mt-0.5 ${
-                        netPositive ? 'text-emerald-700' : 'text-rose-700'
+                      className={`text-lg font-extrabold tabular-nums mt-0.5 ${
+                        netPositive
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : 'text-rose-700 dark:text-rose-400'
                       }`}
                     >
                       Net: {netPositive ? '+' : ''}
@@ -1668,8 +1915,8 @@ function DashboardView({
                   <span
                     className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl ${
                       netPositive
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/70'
+                        : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/70'
                     }`}
                   >
                     {netPositive ? 'Savings' : 'Deficit'}
@@ -1677,41 +1924,41 @@ function DashboardView({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2.5 rounded-2xl bg-emerald-50/70 border border-emerald-100">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700">
+                  <div className="p-2.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/60">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400">
                       <ArrowDownLeft size={13} />
                       <span>Period Income</span>
                     </div>
-                    <div className="text-xs sm:text-sm font-extrabold text-slate-900 mt-1">
+                    <div className="text-xs sm:text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
                       {formatMoney(data.totalMoneyReceived, cur)}
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                       Inc: {formatCompact(data.personalIncome)} · Settled:{' '}
                       {formatCompact(data.settlementsReceived)}
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-2xl bg-rose-50/70 border border-rose-100">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-rose-700">
+                  <div className="p-2.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-rose-700 dark:text-rose-400">
                       <ArrowUpRight size={13} />
                       <span>Period Spend</span>
                     </div>
-                    <div className="text-xs sm:text-sm font-extrabold text-slate-900 mt-1">
+                    <div className="text-xs sm:text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
                       {formatMoney(data.totalMoneySpent, cur)}
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
                       My Share: {formatCompact(data.totalMyExpenses)}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1 px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200/70">
-                    <div className="flex justify-between text-[10px] font-bold text-slate-600 mb-1">
+                  <div className="flex-1 px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-600 dark:text-slate-400 mb-1">
                       <span>Income vs Spend ({incRatio}% In)</span>
                       <span>{100 - incRatio}% Out</span>
                     </div>
-                    <div className="h-2 rounded-full bg-rose-200 overflow-hidden flex">
+                    <div className="h-2 rounded-full bg-rose-200 dark:bg-rose-950/70 overflow-hidden flex">
                       <div
                         className="bg-emerald-500 h-full transition-all duration-300"
                         style={{ width: `${incRatio}%` }}
@@ -1722,10 +1969,12 @@ function DashboardView({
                   <button
                     type="button"
                     onClick={() => onNavigate('balances')}
-                    className="px-3 py-2 rounded-2xl bg-amber-50/80 border border-amber-200 text-left hover:bg-amber-50 shrink-0 touch-manipulation"
+                    className="px-3 py-2 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 text-left hover:bg-amber-50 dark:hover:bg-amber-950/60 shrink-0 touch-manipulation"
                   >
-                    <div className="text-[10px] font-extrabold text-amber-800">Shared Open</div>
-                    <div className="text-[10px] font-extrabold text-emerald-700">
+                    <div className="text-[10px] font-extrabold text-amber-800 dark:text-amber-300">
+                      Shared Open
+                    </div>
+                    <div className="text-[10px] font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">
                       +{formatCompact(data.outstandingReceivable)} / -{formatCompact(data.outstandingPayable)}
                     </div>
                   </button>
@@ -1735,6 +1984,66 @@ function DashboardView({
           })}
         </div>
       </section>
+
+      {/* MONTHLY BUDGETS SUMMARY SHORTCUT CARD */}
+      <div
+        data-testid="dashboard-budgets-card"
+        className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-2xs space-y-3"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 shrink-0">
+              <PieChart size={19} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                Section Budgets ({primaryCurrency} · {periodLabel})
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {dashboardBudgetSummary.totalBudgeted > 0
+                  ? `${formatMoney(dashboardBudgetSummary.totalSpent, primaryCurrency)} spent of ${formatMoney(dashboardBudgetSummary.totalBudgeted, primaryCurrency)}`
+                  : 'Assign budgets to sections & spread across parts'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onNavigate('budgets')}
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/70 text-xs font-extrabold flex items-center gap-1 shrink-0 touch-manipulation active:scale-95"
+          >
+            <span>Budgets</span>
+            <ChevronRight size={14} />
+          </button>
+        </div>
+
+        {dashboardBudgetSummary.totalBudgeted > 0 && (
+          <div className="space-y-1.5">
+            <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${budgetBarTone}`}
+                style={{ width: `${budgetBarPct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[11px] font-bold">
+              <span className="text-slate-500 dark:text-slate-400">
+                {Math.round(dashboardBudgetSummary.overallPercentUsed || 0)}% used ({dashboardBudgetSummary.overallStatusLabel})
+              </span>
+              <span
+                className={`tabular-nums ${
+                  dashboardBudgetSummary.totalRemaining < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-emerald-700 dark:text-emerald-400'
+                }`}
+              >
+                {dashboardBudgetSummary.totalRemaining < 0
+                  ? `Over by ${formatMoney(Math.abs(dashboardBudgetSummary.totalRemaining), primaryCurrency)}`
+                  : `${formatMoney(dashboardBudgetSummary.totalRemaining, primaryCurrency)} remaining`}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* PENDING BANK SMS REVIEW QUEUE ON DASHBOARD */}
       <PendingSection
@@ -1756,6 +2065,7 @@ function DashboardView({
       {/* DEDICATED UPCOMING / PLANNED SECTION ON DASHBOARD */}
       <UpcomingSection
         upcomingTransactions={upcomingTransactions}
+        currencies={currencies}
         getCategory={getCategory}
         getPerson={getPerson}
         onAddUpcoming={() => onQuickAdd('expense', false, 'upcoming')}
@@ -1766,57 +2076,76 @@ function DashboardView({
       />
 
       {/* MANUAL EXCHANGE RATE REFERENCE CONVERTER */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-2xs space-y-3">
+      <div className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200/80 dark:border-slate-800 p-4 shadow-2xs space-y-3">
         <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 shrink-0">
+          <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/60 shrink-0">
             <Coins size={20} />
           </div>
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900">
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
               Manual Currency Reference Converter
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Preview conversions using your custom rate. Original AED &amp; EGP records stay strictly separate.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Preview conversions using your custom rate. All currency ledgers stay strictly separate.
             </p>
           </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <div className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
-            <span className="text-xs font-bold text-slate-600">1 AED =</span>
+          <div className="flex items-center justify-between gap-2 bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-2xl px-3 py-2">
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              1 {validFrom} =
+            </span>
             <div className="flex items-center gap-1.5">
               <input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
-                aria-label="Exchange rate AED to EGP"
+                aria-label={`Exchange rate ${validFrom} to ${validTo}`}
                 value={exchangeRate}
                 onChange={(e) => setExchangeRate(e.target.value)}
-                className="w-20 text-sm font-extrabold text-slate-900 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
+                className="w-20 text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
               />
-              <span className="text-xs font-bold text-slate-500">EGP</span>
+              {currencies.length > 2 ? (
+                <select
+                  aria-label="Target currency"
+                  value={validTo}
+                  onChange={(e) => setConverterTo(e.target.value)}
+                  className="text-xs font-extrabold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1.5 text-slate-800 dark:text-slate-100"
+                >
+                  {currencies
+                    .filter((c) => c.code !== validFrom)
+                    .map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code}
+                      </option>
+                    ))}
+                </select>
+              ) : (
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  {validTo}
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 bg-indigo-50/70 border border-indigo-100 rounded-2xl px-3 py-2 flex-1">
+          <div className="flex items-center justify-between gap-2 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 rounded-2xl px-3 py-2 flex-1">
             <input
               type="number"
               inputMode="decimal"
               aria-label="Converter amount"
               value={converterAmount}
               onChange={(e) => setConverterAmount(e.target.value)}
-              className="w-24 text-sm font-extrabold text-slate-900 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
+              className="w-24 text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-indigo-500"
             />
             <button
               type="button"
-              onClick={() =>
-                setConverterDir((d) => (d === 'AED_TO_EGP' ? 'EGP_TO_AED' : 'AED_TO_EGP'))
-              }
-              className="min-h-[40px] text-xs font-extrabold text-indigo-700 bg-white px-3 py-1.5 rounded-xl border border-indigo-200 active:scale-95 touch-manipulation"
+              onClick={handleSwapConverter}
+              className="min-h-[40px] text-xs font-extrabold text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-indigo-200 dark:border-indigo-800 active:scale-95 touch-manipulation whitespace-nowrap"
             >
-              {converterDir === 'AED_TO_EGP' ? 'AED → EGP' : 'EGP → AED'}
+              {validFrom} → {validTo}
             </button>
-            <span className="text-xs sm:text-sm font-extrabold text-indigo-950 text-right">
+            <span className="text-xs sm:text-sm font-extrabold tabular-nums text-indigo-950 dark:text-indigo-100 text-right">
               = {convertedPreview}
             </span>
           </div>
@@ -1824,18 +2153,20 @@ function DashboardView({
       </div>
 
       {/* RECENT TRANSACTIONS LIST */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <div>
-            <h3 className="text-base font-extrabold text-slate-900">
+            <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
               Recent Activity ({periodLabel})
             </h3>
-            <p className="text-xs text-slate-500">Tap any row to edit details or split shares</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Tap any row to edit details or split shares
+            </p>
           </div>
           <button
             type="button"
             onClick={() => onNavigate('transactions')}
-            className="min-h-[44px] px-2.5 text-xs font-extrabold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 touch-manipulation active:scale-95"
+            className="min-h-[44px] px-2.5 text-xs font-extrabold text-indigo-600 dark:text-emerald-400 hover:text-indigo-700 flex items-center gap-1 touch-manipulation active:scale-95"
           >
             <span>View All</span>
             <ChevronRight size={16} />
@@ -1844,7 +2175,7 @@ function DashboardView({
 
         {recentTransactions.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-sm font-medium text-slate-500">
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
               No transactions recorded in {periodLabel}.
             </p>
             <button
@@ -1856,7 +2187,7 @@ function DashboardView({
             </button>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {recentTransactions.map((tx) => {
               const cat = getCategory(tx.categoryId);
               const payer = getPerson(tx.paidBy);
@@ -1868,22 +2199,22 @@ function DashboardView({
                   key={tx.id}
                   type="button"
                   onClick={() => onEditTx(tx)}
-                  className="w-full text-left px-4 py-3.5 min-h-[64px] flex items-center justify-between gap-3 hover:bg-slate-50/90 active:bg-slate-100 touch-manipulation transition"
+                  className="w-full text-left px-4 py-3.5 min-h-[64px] flex items-center justify-between gap-3 hover:bg-slate-50/90 dark:hover:bg-slate-800/50 active:bg-slate-100 dark:active:bg-slate-800 touch-manipulation transition"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-bold text-slate-900 truncate">
+                        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
                           {tx.description}
                         </p>
                         {tx.isShared && (
-                          <span className="shrink-0 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/70">
+                          <span className="shrink-0 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/70">
                             Shared
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-0.5 truncate">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                         <span>{tx.date}</span>
                         <span>·</span>
                         <span>{acc.name}</span>
@@ -1901,8 +2232,10 @@ function DashboardView({
 
                   <div className="text-right shrink-0">
                     <div
-                      className={`text-sm font-extrabold ${
-                        isIncome ? 'text-emerald-600' : 'text-slate-900'
+                      className={`text-sm font-extrabold tabular-nums ${
+                        isIncome
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-slate-900 dark:text-slate-100'
                       }`}
                     >
                       {isIncome ? '+' : '-'}
@@ -1910,7 +2243,7 @@ function DashboardView({
                     </div>
                     {tx.type === 'expense' &&
                       (tx.isShared || tx.paidBy !== 'me' || (tx.belongsTo && tx.belongsTo !== 'me')) && (
-                        <div className="text-[11px] font-semibold text-slate-500">
+                        <div className="text-[11px] font-semibold tabular-nums text-slate-500 dark:text-slate-400">
                           My share: {formatMoney(shares.me || 0, tx.currency)}
                         </div>
                       )}
@@ -1926,10 +2259,11 @@ function DashboardView({
 }
 
 // ============================================================================
-// 2. TRANSACTIONS VIEW (POSTED + UPCOMING/PLANNED + FILTERS)
+// 2. TRANSACTIONS VIEW (POSTED + UPCOMING/PLANNED + PENDING + FILTERS)
 // ============================================================================
 
 function TransactionsView({
+  currencies,
   transactions,
   upcomingTransactions,
   pendingTransactions,
@@ -1988,22 +2322,24 @@ function TransactionsView({
   }, [transactions, currencyFilter, typeFilter, scopeFilter, categoryFilter, searchQuery, getCategory]);
 
   const listTotals = useMemo(() => {
-    const calc = (cur) => {
-      const items = filtered.filter((t) => t.currency === cur);
-      return {
+    const out = {};
+    currencies.forEach((c) => {
+      const items = filtered.filter((t) => t.currency === c.code);
+      out[c.code] = {
         income: round2(items.filter((t) => t.type === 'income').reduce((a, t) => a + t.amount, 0)),
-        expense: round2(items.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0))
+        expense: round2(items.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0)),
+        count: items.length
       };
-    };
-    return { AED: calc('AED'), EGP: calc('EGP') };
-  }, [filtered]);
+    });
+    return out;
+  }, [filtered, currencies]);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Transactions</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">Transactions</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Showing {filtered.length} posted in {periodLabel} ({allTransactionsCount} total)
           </p>
         </div>
@@ -2011,21 +2347,21 @@ function TransactionsView({
           <button
             type="button"
             onClick={() => onQuickAdd('income', false, 'posted')}
-            className="min-h-[44px] px-3 rounded-2xl bg-emerald-600 text-white text-xs font-extrabold active:scale-95 touch-manipulation"
+            className="min-h-[44px] px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold active:scale-95 touch-manipulation"
           >
             + Income
           </button>
           <button
             type="button"
             onClick={() => onQuickAdd('expense', false, 'posted')}
-            className="min-h-[44px] px-3 rounded-2xl bg-rose-600 text-white text-xs font-extrabold active:scale-95 touch-manipulation"
+            className="min-h-[44px] px-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold active:scale-95 touch-manipulation"
           >
             + Expense
           </button>
         </div>
       </div>
 
-      {/* PENDING BANK SMS QUEUE IN TRANSACTIONS TAB */}
+      {/* PENDING BANK SMS QUEUE */}
       <PendingSection
         pendingTransactions={pendingTransactions}
         accounts={accounts}
@@ -2041,9 +2377,10 @@ function TransactionsView({
         onOpenAppSettings={onOpenAppSettings}
       />
 
-      {/* UPCOMING / PLANNED SECTION IN TRANSACTIONS TAB */}
+      {/* UPCOMING / PLANNED SECTION */}
       <UpcomingSection
         upcomingTransactions={upcomingTransactions}
+        currencies={currencies}
         getCategory={getCategory}
         getPerson={getPerson}
         onAddUpcoming={() => onQuickAdd('expense', false, 'upcoming')}
@@ -2053,7 +2390,7 @@ function TransactionsView({
       />
 
       {/* Filter Bar */}
-      <div className="bg-white p-3.5 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+      <div className="bg-white dark:bg-[#111827] p-3.5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
         <div className="relative">
           <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -2061,14 +2398,18 @@ function TransactionsView({
             placeholder="Search description, category, or notes..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full min-h-[46px] pl-10 pr-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:bg-white focus:border-indigo-500"
+            className="w-full min-h-[46px] pl-10 pr-3.5 py-2.5 text-sm bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500"
           />
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
-          <CurrencyFilterPills value={currencyFilter} onChange={setCurrencyFilter} />
+          <CurrencyFilterPills
+            value={currencyFilter}
+            onChange={setCurrencyFilter}
+            currencies={currencies}
+          />
 
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl shrink-0 select-none">
+          <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0 select-none">
             {[
               { id: 'ALL', label: 'All Types' },
               { id: 'income', label: 'Income' },
@@ -2078,8 +2419,10 @@ function TransactionsView({
                 key={t.id}
                 type="button"
                 onClick={() => setTypeFilter(t.id)}
-                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation active:scale-95 ${
-                  typeFilter === t.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation active:scale-95 whitespace-nowrap ${
+                  typeFilter === t.id
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
                 {t.label}
@@ -2087,7 +2430,7 @@ function TransactionsView({
             ))}
           </div>
 
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl shrink-0 select-none">
+          <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0 select-none">
             {[
               { id: 'ALL', label: 'All Scopes' },
               { id: 'personal', label: 'Personal' },
@@ -2097,8 +2440,10 @@ function TransactionsView({
                 key={s.id}
                 type="button"
                 onClick={() => setScopeFilter(s.id)}
-                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation active:scale-95 ${
-                  scopeFilter === s.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation active:scale-95 whitespace-nowrap ${
+                  scopeFilter === s.id
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
                 {s.label}
@@ -2111,7 +2456,7 @@ function TransactionsView({
           aria-label="Filter by section or category"
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
-          className="w-full min-h-[44px] text-xs font-bold bg-slate-100 border border-slate-200 rounded-2xl px-3.5 py-2 text-slate-700 focus:outline-none focus:border-indigo-500"
+          className="w-full min-h-[44px] text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3.5 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500"
         >
           <option value="ALL">All Sections &amp; Categories</option>
           {sections.map((sec) => (
@@ -2128,37 +2473,42 @@ function TransactionsView({
           ))}
         </select>
 
-        <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2 text-xs">
-          {(currencyFilter === 'ALL' || currencyFilter === 'AED') && (
-            <div className="flex items-center gap-2.5 bg-indigo-50/70 px-3 py-2 rounded-xl border border-indigo-100">
-              <span className="font-extrabold text-indigo-800">AED:</span>
-              <span className="text-emerald-700 font-bold">
-                +{formatMoney(listTotals.AED.income, 'AED')}
-              </span>
-              <span className="text-rose-700 font-bold">
-                -{formatMoney(listTotals.AED.expense, 'AED')}
-              </span>
-            </div>
-          )}
-          {(currencyFilter === 'ALL' || currencyFilter === 'EGP') && (
-            <div className="flex items-center gap-2.5 bg-teal-50/70 px-3 py-2 rounded-xl border border-teal-100">
-              <span className="font-extrabold text-teal-800">EGP:</span>
-              <span className="text-emerald-700 font-bold">
-                +{formatMoney(listTotals.EGP.income, 'EGP')}
-              </span>
-              <span className="text-rose-700 font-bold">
-                -{formatMoney(listTotals.EGP.expense, 'EGP')}
-              </span>
-            </div>
-          )}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 text-xs">
+          {currencies
+            .filter((c) => {
+              if (currencyFilter !== 'ALL') return c.code === currencyFilter;
+              return c.builtIn || (listTotals[c.code]?.count || 0) > 0;
+            })
+            .map((c, idx) => {
+              const totals = listTotals[c.code] || { income: 0, expense: 0 };
+              const accent = getCurrencyAccent(c.code, idx);
+              return (
+                <div
+                  key={c.code}
+                  className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900/70 px-3 py-2 rounded-xl border border-slate-200/80 dark:border-slate-800"
+                >
+                  <span className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-md ${accent.badgeClass}`}>
+                    {c.code}
+                  </span>
+                  <span className="text-emerald-700 dark:text-emerald-400 font-bold tabular-nums">
+                    +{formatMoney(totals.income, c.code)}
+                  </span>
+                  <span className="text-rose-700 dark:text-rose-400 font-bold tabular-nums">
+                    -{formatMoney(totals.expense, c.code)}
+                  </span>
+                </div>
+              );
+            })}
         </div>
       </div>
 
       {/* Transaction Cards */}
       <div className="space-y-2.5">
         {filtered.length === 0 ? (
-          <div className="bg-white p-10 rounded-3xl border border-slate-200/80 text-center">
-            <p className="text-sm font-semibold text-slate-600">No matching transactions found.</p>
+          <div className="bg-white dark:bg-[#111827] p-10 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-center">
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
+              No matching transactions found.
+            </p>
           </div>
         ) : (
           filtered.map((tx) => {
@@ -2173,44 +2523,48 @@ function TransactionsView({
             return (
               <div
                 key={tx.id}
-                className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-2.5"
+                className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-2.5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <h4 className="text-sm font-extrabold text-slate-900 truncate">
+                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
                           {tx.description}
                         </h4>
                         <span
                           className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
                             tx.isShared
-                              ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                           }`}
                         >
                           {tx.isShared ? 'Shared' : 'Personal'}
                         </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700">
                           {acc.name}
                           {acc.last4 ? ` ••${acc.last4}` : ''}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         {tx.date} · {sec.name} / {cat.name}
                         {tx.type === 'expense' && ` · Paid by ${payer.name}`}
                       </p>
                       {tx.notes && (
-                        <p className="text-xs text-slate-500 italic mt-1">“{tx.notes}”</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 italic mt-1">
+                          “{tx.notes}”
+                        </p>
                       )}
                     </div>
                   </div>
 
                   <div className="text-right shrink-0">
                     <div
-                      className={`text-base font-extrabold ${
-                        isIncome ? 'text-emerald-600' : 'text-slate-900'
+                      className={`text-base font-extrabold tabular-nums ${
+                        isIncome
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : 'text-slate-900 dark:text-slate-100'
                       }`}
                     >
                       {isIncome ? '+' : '-'}
@@ -2223,26 +2577,26 @@ function TransactionsView({
                         onClick={() => onEditTx(tx)}
                         aria-label={`Edit ${tx.description}`}
                         title="Edit Transaction"
-                        className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 active:scale-95 touch-manipulation transition"
+                        className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 active:scale-95 touch-manipulation transition"
                       >
                         <Edit3 size={16} />
                       </button>
                       {confirmDeleteId === tx.id ? (
-                        <div className="flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-xl border border-rose-200">
+                        <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/60 px-2 py-1 rounded-xl border border-rose-200 dark:border-rose-800">
                           <button
                             type="button"
                             onClick={() => {
                               onDeleteTx(tx.id);
                               setConfirmDeleteId(null);
                             }}
-                            className="min-h-[32px] px-1.5 text-xs font-extrabold text-rose-700 touch-manipulation"
+                            className="min-h-[32px] px-1.5 text-xs font-extrabold text-rose-700 dark:text-rose-300 touch-manipulation"
                           >
                             Delete
                           </button>
                           <button
                             type="button"
                             onClick={() => setConfirmDeleteId(null)}
-                            className="min-h-[32px] px-1 text-xs text-slate-600 touch-manipulation"
+                            className="min-h-[32px] px-1 text-xs text-slate-600 dark:text-slate-400 touch-manipulation"
                           >
                             No
                           </button>
@@ -2253,7 +2607,7 @@ function TransactionsView({
                           onClick={() => setConfirmDeleteId(tx.id)}
                           aria-label={`Delete ${tx.description}`}
                           title="Delete Transaction"
-                          className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 hover:text-rose-600 hover:bg-rose-50 active:scale-95 touch-manipulation transition"
+                          className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 active:scale-95 touch-manipulation transition"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -2264,11 +2618,11 @@ function TransactionsView({
 
                 {tx.type === 'expense' &&
                   (tx.isShared || shareEntries.some(([pid]) => pid !== 'me')) && (
-                    <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-2 text-[11px] font-bold">
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2 text-[11px] font-bold">
                       {shareEntries.map(([pid, amt]) => (
                         <span
                           key={pid}
-                          className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-700"
+                          className="px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-200 tabular-nums"
                         >
                           {getPerson(pid).name}: {formatMoney(amt, tx.currency)}
                         </span>
@@ -2285,10 +2639,11 @@ function TransactionsView({
 }
 
 // ============================================================================
-// 3. SHARED EXPENSES VIEW (UNLIMITED DYNAMIC PARTICIPANTS)
+// 3. SHARED EXPENSES VIEW (UNLIMITED DYNAMIC PARTICIPANTS + MULTI-CURRENCY)
 // ============================================================================
 
 function SharedExpensesView({
+  currencies,
   transactions,
   allDebtItems,
   periodLabel,
@@ -2305,14 +2660,14 @@ function SharedExpensesView({
       .filter((p) => {
         if (p.id === 'me') return false;
         if (!p.archived) return true;
-        // Include archived person only if they still have open debt
         return (
           allDebtItems.receivables.some((r) => r.personId === p.id && r.outstanding > 0) ||
           allDebtItems.payables.some((pay) => pay.personId === p.id && pay.outstanding > 0)
         );
       })
       .map((person) => {
-        const calcNet = (cur) => {
+        const byCurrency = currencies.map((curObj) => {
+          const cur = curObj.code;
           const theyOweMe = round2(
             allDebtItems.receivables
               .filter((r) => r.personId === person.id && r.currency === cur)
@@ -2324,18 +2679,16 @@ function SharedExpensesView({
               .reduce((a, p) => a + p.outstanding, 0)
           );
           return {
+            cur,
+            builtIn: curObj.builtIn,
             theyOweMe,
             iOweThem,
             net: round2(theyOweMe - iOweThem)
           };
-        };
-        return {
-          person,
-          AED: calcNet('AED'),
-          EGP: calcNet('EGP')
-        };
+        });
+        return { person, byCurrency };
       });
-  }, [people, allDebtItems]);
+  }, [people, allDebtItems, currencies]);
 
   const activePeopleList = useMemo(() => people.filter((p) => !p.archived), [people]);
 
@@ -2343,8 +2696,10 @@ function SharedExpensesView({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Shared Expenses</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">
+            Shared Expenses
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             {activePeopleList.length}-person split tracker (
             {activePeopleList.map((p) => p.name).join(', ')})
           </p>
@@ -2352,7 +2707,7 @@ function SharedExpensesView({
         <button
           type="button"
           onClick={onQuickAdd}
-          className="min-h-[46px] px-4 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm touch-manipulation"
+          className="min-h-[46px] px-4 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm touch-manipulation shrink-0"
         >
           <Plus size={16} />
           <span>Split Expense</span>
@@ -2361,8 +2716,8 @@ function SharedExpensesView({
 
       {/* PARTICIPANTS & NET STANDING CARDS */}
       {personSummaries.length === 0 ? (
-        <div className="bg-white p-6 rounded-3xl border border-slate-200/80 text-center space-y-2">
-          <p className="text-xs text-slate-500">
+        <div className="bg-white dark:bg-[#111827] p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-center space-y-2">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             No other participants added yet. Add people in Settings to split expenses.
           </p>
           <button
@@ -2370,84 +2725,94 @@ function SharedExpensesView({
             onClick={() => onNavigate('settings')}
             className="min-h-[40px] px-4 py-2 rounded-2xl bg-indigo-600 text-white text-xs font-extrabold"
           >
-            Open Settings → People
+            Open Settings → Sharing &amp; People
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {personSummaries.map(({ person, AED, EGP }) => (
-            <div
-              key={person.id}
-              className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div
-                    className="w-9 h-9 rounded-2xl flex items-center justify-center text-white font-extrabold text-sm shrink-0"
-                    style={{ backgroundColor: person.color }}
+          {personSummaries.map(({ person, byCurrency }) => {
+            const visibleRows = byCurrency.filter(
+              (row) => row.builtIn || row.net !== 0 || row.theyOweMe > 0 || row.iOweThem > 0
+            );
+            return (
+              <div
+                key={person.id}
+                className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className="w-9 h-9 rounded-2xl flex items-center justify-center text-white font-extrabold text-sm shrink-0"
+                      style={{ backgroundColor: person.color }}
+                    >
+                      {person.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                        {person.name}
+                      </h3>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        All-time active balance
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('balances')}
+                    className="min-h-[38px] px-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-extrabold text-indigo-700 dark:text-emerald-400 touch-manipulation shrink-0"
                   >
-                    {person.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-extrabold text-slate-900 truncate">
-                      {person.name}
-                    </h3>
-                    <p className="text-[11px] text-slate-500">All-time active balance</p>
-                  </div>
+                    Settle
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('balances')}
-                  className="min-h-[38px] px-3 rounded-xl bg-slate-100 text-xs font-extrabold text-indigo-700 touch-manipulation shrink-0"
-                >
-                  Settle
-                </button>
-              </div>
 
-              <div className="space-y-2 text-xs">
-                {[
-                  { cur: 'AED', stats: AED },
-                  { cur: 'EGP', stats: EGP }
-                ].map(({ cur, stats }) => (
-                  <div
-                    key={cur}
-                    className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between"
-                  >
-                    <span className="font-extrabold text-slate-700">{cur}</span>
-                    {stats.net > 0 ? (
-                      <span className="font-extrabold text-emerald-700">
-                        Owes you {formatMoney(stats.net, cur)}
-                      </span>
-                    ) : stats.net < 0 ? (
-                      <span className="font-extrabold text-rose-700">
-                        You owe {formatMoney(Math.abs(stats.net), cur)}
-                      </span>
-                    ) : (
-                      <span className="font-bold text-slate-400">Settled (0.00)</span>
-                    )}
-                  </div>
-                ))}
+                <div className="space-y-2 text-xs">
+                  {visibleRows.map(({ cur, net }) => (
+                    <div
+                      key={cur}
+                      className="p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 flex items-center justify-between"
+                    >
+                      <span className="font-extrabold text-slate-700 dark:text-slate-300">{cur}</span>
+                      {net > 0 ? (
+                        <span className="font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">
+                          Owes you {formatMoney(net, cur)}
+                        </span>
+                      ) : net < 0 ? (
+                        <span className="font-extrabold tabular-nums text-rose-700 dark:text-rose-400">
+                          You owe {formatMoney(Math.abs(net), cur)}
+                        </span>
+                      ) : (
+                        <span className="font-bold text-slate-400 dark:text-slate-500">
+                          Settled (0.00)
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* SHARED EXPENSES LOG FOR SELECTED PERIOD */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-2xs overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-base font-extrabold text-slate-900">
+      <div className="bg-white dark:bg-[#111827] rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
             Shared &amp; On-Behalf Expenses ({periodLabel})
           </h3>
-          <span className="text-xs font-bold text-slate-500">{transactions.length} items</span>
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+            {transactions.length} items
+          </span>
         </div>
 
         {transactions.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-sm text-slate-500">No shared expenses in {periodLabel}.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              No shared expenses in {periodLabel}.
+            </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {transactions.map((tx) => {
               const cat = getCategory(tx.categoryId);
               const payer = getPerson(tx.paidBy);
@@ -2462,18 +2827,18 @@ function SharedExpensesView({
                     <div className="flex items-start gap-3 min-w-0">
                       <CategoryIcon iconName={cat.icon} color={cat.color} size={18} />
                       <div className="min-w-0">
-                        <h4 className="text-sm font-extrabold text-slate-900 truncate">
+                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
                           {tx.description}
                         </h4>
-                        <p className="text-xs text-slate-500 mt-0.5">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                           {tx.date} · Paid by{' '}
-                          <strong className="text-slate-700">{payer.name}</strong>
+                          <strong className="text-slate-700 dark:text-slate-200">{payer.name}</strong>
                         </p>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
-                      <div className="text-sm font-extrabold text-slate-900">
+                      <div className="text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100">
                         {formatMoney(tx.amount, tx.currency)}
                       </div>
                       <div className="flex items-center justify-end gap-1 mt-1">
@@ -2481,7 +2846,7 @@ function SharedExpensesView({
                           type="button"
                           aria-label={`Edit ${tx.description}`}
                           onClick={() => onEditTx(tx)}
-                          className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
+                          className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 hover:text-indigo-600 dark:hover:text-indigo-400"
                         >
                           <Edit3 size={15} />
                         </button>
@@ -2489,7 +2854,7 @@ function SharedExpensesView({
                           type="button"
                           aria-label={`Delete ${tx.description}`}
                           onClick={() => onDeleteTx(tx.id)}
-                          className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+                          className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 hover:text-rose-600 dark:hover:text-rose-400"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -2501,10 +2866,10 @@ function SharedExpensesView({
                     {involvedPeople.map((p) => (
                       <div
                         key={p.id}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-[11px]"
+                        className="px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 text-[11px]"
                       >
-                        <div className="text-slate-500 truncate">{p.name}</div>
-                        <div className="font-extrabold text-slate-900">
+                        <div className="text-slate-500 dark:text-slate-400 truncate">{p.name}</div>
+                        <div className="font-extrabold tabular-nums text-slate-900 dark:text-slate-100">
                           {formatMoney(shares[p.id] || 0, tx.currency)}
                         </div>
                       </div>
@@ -2525,6 +2890,7 @@ function SharedExpensesView({
 // ============================================================================
 
 function BalancesView({
+  currencies,
   allDebtItems,
   people,
   getPerson,
@@ -2555,16 +2921,26 @@ function BalancesView({
     });
   }, [rawList, currencyFilter, personFilter, statusFilter]);
 
-  const totals = useMemo(() => {
-    const calc = (list, cur) =>
-      round2(list.filter((i) => i.currency === cur).reduce((acc, i) => acc + i.outstanding, 0));
-    return {
-      receiveAED: calc(allDebtItems.receivables, 'AED'),
-      receiveEGP: calc(allDebtItems.receivables, 'EGP'),
-      payAED: calc(allDebtItems.payables, 'AED'),
-      payEGP: calc(allDebtItems.payables, 'EGP')
-    };
-  }, [allDebtItems]);
+  const totalsByCurrency = useMemo(() => {
+    return currencies.map((curObj) => {
+      const cur = curObj.code;
+      const receive = round2(
+        allDebtItems.receivables
+          .filter((i) => i.currency === cur)
+          .reduce((acc, i) => acc + i.outstanding, 0)
+      );
+      const pay = round2(
+        allDebtItems.payables
+          .filter((i) => i.currency === cur)
+          .reduce((acc, i) => acc + i.outstanding, 0)
+      );
+      return { code: cur, builtIn: curObj.builtIn, receive, pay };
+    });
+  }, [allDebtItems, currencies]);
+
+  const visibleSummaryRows = totalsByCurrency.filter(
+    (r) => r.builtIn || r.receive > 0 || r.pay > 0
+  );
 
   const handleShareDebtSummary = () => {
     const otherNames = people
@@ -2605,8 +2981,8 @@ function BalancesView({
     lines.push(
       '',
       `📌 *Totals (${otherNames || 'All Participants'}):*`,
-      `• Receivable: ${formatMoney(totals.receiveAED, 'AED')} | ${formatMoney(totals.receiveEGP, 'EGP')}`,
-      `• Payable: ${formatMoney(totals.payAED, 'AED')} | ${formatMoney(totals.payEGP, 'EGP')}`
+      `• Receivable: ${visibleSummaryRows.map((r) => formatMoney(r.receive, r.code)).join(' | ')}`,
+      `• Payable: ${visibleSummaryRows.map((r) => formatMoney(r.pay, r.code)).join(' | ')}`
     );
 
     shareTextSummary({
@@ -2620,8 +2996,10 @@ function BalancesView({
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Financial Balances</h2>
-          <p className="text-xs text-slate-500">
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">
+            Financial Balances
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Track receivables &amp; payables with partial settlement logs
           </p>
         </div>
@@ -2644,22 +3022,30 @@ function BalancesView({
           className={`p-3.5 rounded-3xl border text-left transition touch-manipulation active:scale-[0.98] ${
             activeSubTab === 'receive'
               ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
-              : 'bg-white text-slate-900 border-slate-200'
+              : 'bg-white dark:bg-[#111827] text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800'
           }`}
         >
           <div className="flex items-center gap-1.5 text-xs font-extrabold">
             <ArrowDownLeft size={16} />
             <span>A. Should Receive</span>
           </div>
-          <div className="mt-2 space-y-0.5">
-            <div className="text-sm font-extrabold">{formatMoney(totals.receiveAED, 'AED')}</div>
-            <div
-              className={`text-xs font-bold ${
-                activeSubTab === 'receive' ? 'text-emerald-100' : 'text-slate-500'
-              }`}
-            >
-              {formatMoney(totals.receiveEGP, 'EGP')}
-            </div>
+          <div className="mt-2 space-y-0.5 tabular-nums">
+            {visibleSummaryRows.map((r, idx) => (
+              <div
+                key={r.code}
+                className={
+                  idx === 0
+                    ? 'text-sm font-extrabold'
+                    : `text-xs font-bold ${
+                        activeSubTab === 'receive'
+                          ? 'text-emerald-100'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`
+                }
+              >
+                {formatMoney(r.receive, r.code)}
+              </div>
+            ))}
           </div>
         </button>
 
@@ -2669,30 +3055,38 @@ function BalancesView({
           className={`p-3.5 rounded-3xl border text-left transition touch-manipulation active:scale-[0.98] ${
             activeSubTab === 'pay'
               ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/20'
-              : 'bg-white text-slate-900 border-slate-200'
+              : 'bg-white dark:bg-[#111827] text-slate-900 dark:text-slate-100 border-slate-200 dark:border-slate-800'
           }`}
         >
           <div className="flex items-center gap-1.5 text-xs font-extrabold">
             <ArrowUpRight size={16} />
             <span>B. Should Pay</span>
           </div>
-          <div className="mt-2 space-y-0.5">
-            <div className="text-sm font-extrabold">{formatMoney(totals.payAED, 'AED')}</div>
-            <div
-              className={`text-xs font-bold ${
-                activeSubTab === 'pay' ? 'text-rose-100' : 'text-slate-500'
-              }`}
-            >
-              {formatMoney(totals.payEGP, 'EGP')}
-            </div>
+          <div className="mt-2 space-y-0.5 tabular-nums">
+            {visibleSummaryRows.map((r, idx) => (
+              <div
+                key={r.code}
+                className={
+                  idx === 0
+                    ? 'text-sm font-extrabold'
+                    : `text-xs font-bold ${
+                        activeSubTab === 'pay'
+                          ? 'text-rose-100'
+                          : 'text-slate-500 dark:text-slate-400'
+                      }`
+                }
+              >
+                {formatMoney(r.pay, r.code)}
+              </div>
+            ))}
           </div>
         </button>
       </div>
 
       {/* FILTERS */}
-      <div className="bg-white p-3.5 rounded-3xl border border-slate-200/80 space-y-2.5">
+      <div className="bg-white dark:bg-[#111827] p-3.5 rounded-3xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl shrink-0 select-none">
+          <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl shrink-0 select-none">
             {[
               { id: 'OPEN', label: 'Unpaid & Partial' },
               { id: 'ALL', label: 'All History' },
@@ -2702,8 +3096,10 @@ function BalancesView({
                 key={st.id}
                 type="button"
                 onClick={() => setStatusFilter(st.id)}
-                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation active:scale-95 ${
-                  statusFilter === st.id ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-600'
+                className={`min-h-[40px] px-3 py-1.5 text-xs font-bold rounded-lg transition touch-manipulation active:scale-95 whitespace-nowrap ${
+                  statusFilter === st.id
+                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400'
                 }`}
               >
                 {st.label}
@@ -2711,14 +3107,18 @@ function BalancesView({
             ))}
           </div>
 
-          <CurrencyFilterPills value={currencyFilter} onChange={setCurrencyFilter} />
+          <CurrencyFilterPills
+            value={currencyFilter}
+            onChange={setCurrencyFilter}
+            currencies={currencies}
+          />
         </div>
 
         <select
           aria-label="Filter balances by participant"
           value={personFilter}
           onChange={(e) => setPersonFilter(e.target.value)}
-          className="w-full min-h-[44px] text-xs font-bold bg-slate-100 border border-slate-200 rounded-2xl px-3.5 py-2 text-slate-700"
+          className="w-full min-h-[44px] text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3.5 py-2 text-slate-700 dark:text-slate-200"
         >
           <option value="ALL">All Participants</option>
           {people
@@ -2735,8 +3135,8 @@ function BalancesView({
       {/* DEBT ITEMS LIST */}
       <div className="space-y-3">
         {filteredList.length === 0 ? (
-          <div className="bg-white p-10 rounded-3xl border border-slate-200/80 text-center">
-            <p className="text-sm font-semibold text-slate-600">
+          <div className="bg-white dark:bg-[#111827] p-10 rounded-3xl border border-slate-200/80 dark:border-slate-800 text-center">
+            <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
               No {activeSubTab === 'receive' ? 'receivables' : 'payables'} matching your filter.
             </p>
           </div>
@@ -2749,7 +3149,7 @@ function BalancesView({
             return (
               <div
                 key={item.key}
-                className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3"
+                className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
@@ -2767,20 +3167,20 @@ function BalancesView({
                         <span
                           className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
                             item.status === 'Paid'
-                              ? 'bg-emerald-100 text-emerald-800'
+                              ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300'
                               : item.status === 'Partial'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-rose-100 text-rose-800'
+                              ? 'bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300'
+                              : 'bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300'
                           }`}
                         >
                           {item.status}
                         </span>
                       </div>
 
-                      <h4 className="text-sm font-extrabold text-slate-900 mt-1.5">
+                      <h4 className="text-sm font-extrabold text-slate-900 dark:text-slate-100 mt-1.5">
                         {item.description}
                       </h4>
-                      <p className="text-xs text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         Date: {item.date} · Original Share:{' '}
                         {formatMoney(item.originalShare, item.currency)}
                       </p>
@@ -2788,28 +3188,30 @@ function BalancesView({
                   </div>
 
                   <div className="text-right shrink-0">
-                    <div className="text-[11px] font-bold text-slate-500">Outstanding</div>
+                    <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      Outstanding
+                    </div>
                     <div
-                      className={`text-base font-extrabold ${
+                      className={`text-base font-extrabold tabular-nums ${
                         item.outstanding > 0
                           ? activeSubTab === 'receive'
-                            ? 'text-emerald-700'
-                            : 'text-rose-700'
-                          : 'text-slate-400'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : 'text-rose-700 dark:text-rose-400'
+                          : 'text-slate-400 dark:text-slate-500'
                       }`}
                     >
                       {formatMoney(item.outstanding, item.currency)}
                     </div>
                     {item.paidSoFar > 0 && (
-                      <div className="text-[11px] font-semibold text-slate-500">
+                      <div className="text-[11px] font-semibold tabular-nums text-slate-500 dark:text-slate-400">
                         Settled: {formatMoney(item.paidSoFar, item.currency)}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-semibold text-slate-500">
+                <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                     Total Bill: {formatMoney(item.totalExpenseAmount, item.currency)}
                   </span>
 
@@ -2818,7 +3220,7 @@ function BalancesView({
                       <button
                         type="button"
                         onClick={() => toggleExpand(item.key)}
-                        className="min-h-[42px] px-3 py-1.5 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-bold flex items-center gap-1 touch-manipulation"
+                        className="min-h-[42px] px-3 py-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1 touch-manipulation"
                       >
                         <span>History ({item.settlementHistory.length})</span>
                         {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
@@ -2842,28 +3244,32 @@ function BalancesView({
                 </div>
 
                 {isExpanded && item.settlementHistory.length > 0 && (
-                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 space-y-2">
+                    <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Settlement Log
                     </div>
                     {item.settlementHistory.map((s) => (
                       <div
                         key={s.id}
-                        className="flex items-center justify-between gap-2 text-xs bg-white px-3 py-2 rounded-xl border border-slate-200/70"
+                        className="flex items-center justify-between gap-2 text-xs bg-white dark:bg-[#111827] px-3 py-2 rounded-xl border border-slate-200/70 dark:border-slate-800"
                       >
                         <div>
-                          <span className="font-extrabold text-emerald-700">
+                          <span className="font-extrabold tabular-nums text-emerald-700 dark:text-emerald-400">
                             {formatMoney(s.amount, s.currency)}
                           </span>
-                          <span className="text-slate-500 ml-2">{s.date}</span>
-                          {s.note && <span className="text-slate-500 italic ml-2">({s.note})</span>}
+                          <span className="text-slate-500 dark:text-slate-400 ml-2">{s.date}</span>
+                          {s.note && (
+                            <span className="text-slate-500 dark:text-slate-400 italic ml-2">
+                              ({s.note})
+                            </span>
+                          )}
                         </div>
                         <button
                           type="button"
                           onClick={() => onDeleteSettlement(s.id)}
                           aria-label="Delete settlement entry"
                           title="Delete Settlement Entry"
-                          className="p-1.5 text-slate-400 hover:text-rose-600"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400"
                         >
                           <Trash2 size={14} />
                         </button>
@@ -2881,10 +3287,12 @@ function BalancesView({
 }
 
 // ============================================================================
-// 5. REPORTS & ANALYTICS VIEW
+// 5. REPORTS & ANALYTICS VIEW (DYNAMIC MULTI-CURRENCY + DUAL-THEME SVG)
 // ============================================================================
 
 function ReportsView({
+  currencies,
+  primaryCurrency,
   transactions,
   periodTransactions,
   summary,
@@ -2897,9 +3305,23 @@ function ReportsView({
   getSection,
   showToast
 }) {
-  const [reportCurrency, setReportCurrency] = useState('AED');
+  const [selectedCurrency, setSelectedCurrency] = useState(primaryCurrency || 'AED');
+  const reportCurrency = currencies.some((c) => c.code === selectedCurrency)
+    ? selectedCurrency
+    : currencies[0]?.code || 'AED';
 
-  const curStats = summary[reportCurrency];
+  const curStats = summary[reportCurrency] || {
+    personalIncome: 0,
+    settlementsReceived: 0,
+    totalMoneyReceived: 0,
+    myPersonalExpenses: 0,
+    mySharedExpenseShare: 0,
+    totalMyExpenses: 0,
+    settlementsPaid: 0,
+    remainingBalance: 0,
+    outstandingReceivable: 0,
+    outstandingPayable: 0
+  };
 
   const sixMonthSeries = useMemo(() => {
     const months = [];
@@ -3061,24 +3483,28 @@ function ReportsView({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">Reports &amp; Analytics</h2>
-          <p className="text-xs text-slate-500">Period insights for {periodLabel}</p>
+          <h2 className="text-xl font-extrabold text-slate-900 dark:text-slate-100">
+            Reports &amp; Analytics
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Period insights for {periodLabel}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200 select-none">
-            {['AED', 'EGP'].map((c) => (
+          <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 select-none overflow-x-auto no-scrollbar max-w-full">
+            {currencies.map((c) => (
               <button
-                key={c}
+                key={c.code}
                 type="button"
-                onClick={() => setReportCurrency(c)}
-                className={`min-h-[42px] px-4 py-1.5 text-xs font-extrabold rounded-lg transition touch-manipulation active:scale-95 ${
-                  reportCurrency === c
+                onClick={() => setSelectedCurrency(c.code)}
+                className={`min-h-[40px] px-3.5 py-1.5 text-xs font-extrabold rounded-lg transition touch-manipulation active:scale-95 whitespace-nowrap ${
+                  reportCurrency === c.code
                     ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {c}
+                {c.code}
               </button>
             ))}
           </div>
@@ -3086,7 +3512,7 @@ function ReportsView({
           <button
             type="button"
             onClick={() => handleDownloadPeriodReport(false)}
-            className="min-h-[46px] flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 active:scale-95 text-white text-xs font-extrabold shadow-xs touch-manipulation transition"
+            className="min-h-[44px] flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 active:scale-95 text-white text-xs font-extrabold shadow-xs touch-manipulation transition"
           >
             <Download size={15} />
             <span>CSV</span>
@@ -3095,7 +3521,7 @@ function ReportsView({
           <button
             type="button"
             onClick={() => handleDownloadPeriodReport(true)}
-            className="min-h-[46px] flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-extrabold shadow-xs touch-manipulation transition"
+            className="min-h-[44px] flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-extrabold shadow-xs touch-manipulation transition"
           >
             <Share2 size={15} />
             <span>Share</span>
@@ -3104,56 +3530,56 @@ function ReportsView({
       </div>
 
       {/* KPI GRID */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-extrabold text-slate-900">
+      <div className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
             {periodLabel} Overview ({reportCurrency})
           </h3>
-          <span className="text-xs font-bold text-indigo-700">
+          <span className="text-xs font-bold tabular-nums text-indigo-700 dark:text-emerald-400">
             Net Balance: {formatMoney(curStats.remainingBalance, reportCurrency)}
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-          <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-100">
-            <div className="text-emerald-800 font-bold">Total Income</div>
-            <div className="text-sm font-extrabold text-slate-900 mt-1">
+          <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/60">
+            <div className="text-emerald-800 dark:text-emerald-400 font-bold">Total Income</div>
+            <div className="text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               {formatMoney(curStats.personalIncome, reportCurrency)}
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-rose-50/70 border border-rose-100">
-            <div className="text-rose-800 font-bold">My Total Expenses</div>
-            <div className="text-sm font-extrabold text-slate-900 mt-1">
+          <div className="p-3 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900/60">
+            <div className="text-rose-800 dark:text-rose-400 font-bold">My Total Expenses</div>
+            <div className="text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               {formatMoney(curStats.totalMyExpenses, reportCurrency)}
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70">
-            <div className="text-slate-600 font-bold">Personal Expenses</div>
-            <div className="text-sm font-extrabold text-slate-900 mt-1">
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800">
+            <div className="text-slate-600 dark:text-slate-400 font-bold">Personal Expenses</div>
+            <div className="text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               {formatMoney(curStats.myPersonalExpenses, reportCurrency)}
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-indigo-50/70 border border-indigo-100">
-            <div className="text-indigo-800 font-bold">My Shared Share</div>
-            <div className="text-sm font-extrabold text-slate-900 mt-1">
+          <div className="p-3 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60">
+            <div className="text-indigo-800 dark:text-indigo-300 font-bold">My Shared Share</div>
+            <div className="text-sm font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               {formatMoney(curStats.mySharedExpenseShare, reportCurrency)}
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70">
-            <div className="text-slate-600 font-bold">Settled In / Out</div>
-            <div className="text-xs font-extrabold text-slate-900 mt-1">
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800">
+            <div className="text-slate-600 dark:text-slate-400 font-bold">Settled In / Out</div>
+            <div className="text-xs font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               +{formatCompact(curStats.settlementsReceived)} / -
               {formatCompact(curStats.settlementsPaid)}
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-100">
-            <div className="text-amber-800 font-bold">Open Debts (All-Time)</div>
-            <div className="text-xs font-extrabold text-slate-900 mt-1">
+          <div className="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/60">
+            <div className="text-amber-800 dark:text-amber-300 font-bold">Open Debts (All-Time)</div>
+            <div className="text-xs font-extrabold tabular-nums text-slate-900 dark:text-slate-100 mt-1">
               +{formatCompact(curStats.outstandingReceivable)} / -
               {formatCompact(curStats.outstandingPayable)}
             </div>
@@ -3161,26 +3587,32 @@ function ReportsView({
         </div>
       </div>
 
-      {/* 6-MONTH INCOME VS EXPENSES SVG BAR CHART */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between">
+      {/* 6-MONTH INCOME VS EXPENSES SVG BAR CHART (DUAL-THEME ACCESSIBLE) */}
+      <div className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
-            <h3 className="text-sm font-extrabold text-slate-900">
+            <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
               6-Month Income vs Expenses ({reportCurrency})
             </h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               MoM Expense Change:{' '}
-              <strong className={momComparison.expDiff <= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+              <strong
+                className={
+                  momComparison.expDiff <= 0
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-rose-700 dark:text-rose-400'
+                }
+              >
                 {momComparison.expDiff >= 0 ? '+' : ''}
                 {formatMoney(momComparison.expDiff, reportCurrency)}
               </strong>
             </p>
           </div>
           <div className="flex items-center gap-3 text-[11px] font-bold">
-            <span className="flex items-center gap-1 text-emerald-700">
+            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
               <span className="w-2.5 h-2.5 rounded-xs bg-emerald-500 inline-block" /> Income
             </span>
-            <span className="flex items-center gap-1 text-rose-700">
+            <span className="flex items-center gap-1 text-rose-700 dark:text-rose-400">
               <span className="w-2.5 h-2.5 rounded-xs bg-rose-500 inline-block" /> Expenses
             </span>
           </div>
@@ -3197,7 +3629,7 @@ function ReportsView({
                     y1={yPos}
                     x2="348"
                     y2={yPos}
-                    stroke="#e2e8f0"
+                    className="stroke-slate-200 dark:stroke-slate-700/80"
                     strokeDasharray="3 3"
                     strokeWidth="1"
                   />
@@ -3231,7 +3663,7 @@ function ReportsView({
                     x={groupX + 15}
                     y="160"
                     textAnchor="middle"
-                    fill="#475569"
+                    className="fill-slate-600 dark:fill-slate-400"
                     fontSize="11"
                     fontWeight="700"
                   >
@@ -3245,18 +3677,18 @@ function ReportsView({
       </div>
 
       {/* SPENDING BY CATEGORY */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
+      <div className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-extrabold text-slate-900">
+          <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
             Spending by Category ({reportCurrency})
           </h3>
-          <span className="text-xs font-bold text-slate-500">
+          <span className="text-xs font-bold tabular-nums text-slate-500 dark:text-slate-400">
             Total: {formatMoney(categoryBreakdown.total, reportCurrency)}
           </span>
         </div>
 
         {categoryBreakdown.list.length === 0 ? (
-          <p className="text-xs text-slate-500 py-4 text-center">
+          <p className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">
             No {reportCurrency} expenses recorded in {periodLabel}.
           </p>
         ) : (
@@ -3270,19 +3702,21 @@ function ReportsView({
               return (
                 <div key={item.categoryId} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 font-bold text-slate-800">
+                    <div className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-200">
                       <span
                         className="w-2.5 h-2.5 rounded-full"
                         style={{ backgroundColor: cat.color }}
                       />
                       <span>{cat.name}</span>
-                      <span className="text-slate-400 font-normal">({pct}%)</span>
+                      <span className="text-slate-400 dark:text-slate-500 font-normal">
+                        ({pct}%)
+                      </span>
                     </div>
-                    <span className="font-extrabold text-slate-900">
+                    <span className="font-extrabold tabular-nums text-slate-900 dark:text-slate-100">
                       {formatMoney(item.amount, reportCurrency)}
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                     <div
                       className="h-full rounded-full transition-all duration-300"
                       style={{ width: `${pct}%`, backgroundColor: cat.color }}
@@ -3295,66 +3729,95 @@ function ReportsView({
         )}
       </div>
 
-      {/* SPENDING BY PARTICIPANT (DYNAMIC GRID FOR UNLIMITED PARTICIPANTS) */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
-        <h3 className="text-sm font-extrabold text-slate-900">
+      {/* SPENDING BY PARTICIPANT */}
+      <div className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
+        <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
           Participant Breakdown ({periodLabel} · {reportCurrency})
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
           {personBreakdown.map(({ person, paidOutOfPocket, responsibleShare }) => (
             <div
               key={person.id}
-              className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5"
+              className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 space-y-1.5"
             >
               <div className="flex items-center gap-2">
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: person.color }}
                 />
-                <span className="text-xs font-extrabold text-slate-900 truncate">
+                <span className="text-xs font-extrabold text-slate-900 dark:text-slate-100 truncate">
                   {person.name}
                 </span>
               </div>
-              <div className="text-[11px] text-slate-600 flex justify-between">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 flex justify-between">
                 <span>Paid Out-of-Pocket:</span>
-                <strong className="text-slate-900">{formatCompact(paidOutOfPocket)}</strong>
+                <strong className="text-slate-900 dark:text-slate-100 tabular-nums">
+                  {formatCompact(paidOutOfPocket)}
+                </strong>
               </div>
-              <div className="text-[11px] text-slate-600 flex justify-between">
+              <div className="text-[11px] text-slate-600 dark:text-slate-400 flex justify-between">
                 <span>Responsible Share:</span>
-                <strong className="text-indigo-700">{formatCompact(responsibleShare)}</strong>
+                <strong className="text-indigo-700 dark:text-emerald-400 tabular-nums">
+                  {formatCompact(responsibleShare)}
+                </strong>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* AED VS EGP SIDE-BY-SIDE COMPARISON */}
-      <div className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-2xs space-y-3">
-        <h3 className="text-sm font-extrabold text-slate-900">AED vs EGP Period Comparison</h3>
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          {['AED', 'EGP'].map((cur) => {
-            const s = summary[cur];
+      {/* MULTI-CURRENCY SIDE-BY-SIDE COMPARISON */}
+      <div className="bg-white dark:bg-[#111827] p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xs space-y-3">
+        <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+          Multi-Currency Period Comparison ({periodLabel})
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          {currencies.map((curObj, idx) => {
+            const cur = curObj.code;
+            const s = summary[cur] || {
+              personalIncome: 0,
+              totalMyExpenses: 0,
+              outstandingReceivable: 0,
+              outstandingPayable: 0
+            };
+            const accent = getCurrencyAccent(cur, idx);
+            const meta = getCurrencyMeta(currencies, cur);
             return (
               <div
                 key={cur}
-                className="p-3 rounded-2xl bg-slate-50 border border-slate-200/70 space-y-1"
+                className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 space-y-1.5"
               >
-                <div className="font-extrabold text-indigo-700 text-sm">{cur}</div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Income:</span>
-                  <strong className="text-emerald-700">{formatCompact(s.personalIncome)}</strong>
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-extrabold px-2 py-0.5 rounded-lg ${accent.badgeClass}`}>
+                    {cur}
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                    {meta.name}
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">My Expenses:</span>
-                  <strong className="text-rose-700">{formatCompact(s.totalMyExpenses)}</strong>
+                  <span className="text-slate-500 dark:text-slate-400">Income:</span>
+                  <strong className="text-emerald-700 dark:text-emerald-400 tabular-nums">
+                    {formatCompact(s.personalIncome)}
+                  </strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Owed to me:</span>
-                  <strong>{formatCompact(s.outstandingReceivable)}</strong>
+                  <span className="text-slate-500 dark:text-slate-400">My Expenses:</span>
+                  <strong className="text-rose-700 dark:text-rose-400 tabular-nums">
+                    {formatCompact(s.totalMyExpenses)}
+                  </strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">I owe:</span>
-                  <strong>{formatCompact(s.outstandingPayable)}</strong>
+                  <span className="text-slate-500 dark:text-slate-400">Owed to me:</span>
+                  <strong className="text-slate-900 dark:text-slate-100 tabular-nums">
+                    {formatCompact(s.outstandingReceivable)}
+                  </strong>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500 dark:text-slate-400">I owe:</span>
+                  <strong className="text-slate-900 dark:text-slate-100 tabular-nums">
+                    {formatCompact(s.outstandingPayable)}
+                  </strong>
                 </div>
               </div>
             );
@@ -3409,19 +3872,19 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/65 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Record Settlement"
-        className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden max-h-[90dvh] flex flex-col"
+        className="bg-white dark:bg-[#111827] w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[90dvh] flex flex-col"
       >
         <div className="pt-2.5 pb-1 flex justify-center sm:hidden shrink-0">
-          <div className="w-10 h-1.5 rounded-full bg-slate-300" />
+          <div className="w-10 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700" />
         </div>
 
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <h3 className="text-base font-extrabold text-slate-900">
+        <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
+          <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
             {item.direction === 'receive'
               ? `Receive Payment from ${person.name}`
               : `Pay Balance to ${person.name}`}
@@ -3430,7 +3893,7 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="w-11 h-11 flex items-center justify-center rounded-2xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 touch-manipulation"
+            className="w-11 h-11 flex items-center justify-center rounded-2xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 touch-manipulation"
           >
             <X size={20} />
           </button>
@@ -3438,33 +3901,42 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
 
         <form onSubmit={handleConfirm} className="flex flex-col flex-1 overflow-hidden">
           <div className="p-5 space-y-4 overflow-y-auto flex-1">
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1 text-xs">
-              <div className="font-bold text-slate-900 text-sm">{item.description}</div>
-              <div className="flex justify-between text-slate-600">
-                <span>Original Share:</span>
-                <span className="font-bold">{formatMoney(item.originalShare, item.currency)}</span>
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 space-y-1 text-xs">
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                {item.description}
               </div>
-              <div className="flex justify-between text-slate-600">
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <span>Original Share:</span>
+                <span className="font-bold tabular-nums">
+                  {formatMoney(item.originalShare, item.currency)}
+                </span>
+              </div>
+              <div className="flex justify-between text-slate-600 dark:text-slate-400">
                 <span>Already Settled:</span>
-                <span className="font-bold text-emerald-700">
+                <span className="font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
                   {formatMoney(item.paidSoFar, item.currency)}
                 </span>
               </div>
-              <div className="flex justify-between text-slate-900 pt-1 border-t border-slate-200 font-extrabold">
+              <div className="flex justify-between text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200 dark:border-slate-800 font-extrabold">
                 <span>Remaining Due:</span>
-                <span>{formatMoney(item.outstanding, item.currency)}</span>
+                <span className="tabular-nums">
+                  {formatMoney(item.outstanding, item.currency)}
+                </span>
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label htmlFor="settle-amount" className="text-xs font-bold text-slate-600">
+                <label
+                  htmlFor="settle-amount"
+                  className="text-xs font-bold text-slate-600 dark:text-slate-400"
+                >
                   Settlement Amount ({item.currency})
                 </label>
                 <button
                   type="button"
                   onClick={() => setAmount(String(item.outstanding))}
-                  className="min-h-[36px] px-2 text-xs font-extrabold text-indigo-600 hover:underline touch-manipulation"
+                  className="min-h-[36px] px-2 text-xs font-extrabold text-indigo-600 dark:text-emerald-400 hover:underline touch-manipulation"
                 >
                   Full Balance ({formatMoney(item.outstanding, item.currency)})
                 </button>
@@ -3476,19 +3948,22 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
                 step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full min-h-[50px] text-xl font-extrabold px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:border-indigo-500"
+                className="w-full min-h-[50px] text-xl font-extrabold tabular-nums px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
             <div>
-              <label htmlFor="settle-account" className="text-xs font-bold text-slate-600 block mb-1">
+              <label
+                htmlFor="settle-account"
+                className="text-xs font-bold text-slate-600 dark:text-slate-400 block mb-1"
+              >
                 Account / Card ({item.currency})
               </label>
               <select
                 id="settle-account"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
-                className="w-full min-h-[46px] text-sm font-bold px-3.5 py-2 rounded-2xl border border-slate-200 bg-slate-50"
+                className="w-full min-h-[46px] text-sm font-bold px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               >
                 {currencyAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
@@ -3500,7 +3975,10 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
             </div>
 
             <div>
-              <label htmlFor="settle-date" className="text-xs font-bold text-slate-600 block mb-1">
+              <label
+                htmlFor="settle-date"
+                className="text-xs font-bold text-slate-600 dark:text-slate-400 block mb-1"
+              >
                 Settlement Date
               </label>
               <input
@@ -3508,12 +3986,15 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full min-h-[48px] text-sm font-semibold px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50"
+                className="w-full min-h-[48px] text-sm font-semibold px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               />
             </div>
 
             <div>
-              <label htmlFor="settle-note" className="text-xs font-bold text-slate-600 block mb-1">
+              <label
+                htmlFor="settle-note"
+                className="text-xs font-bold text-slate-600 dark:text-slate-400 block mb-1"
+              >
                 Note (Optional)
               </label>
               <input
@@ -3522,18 +4003,18 @@ function SettlementModal({ item, accounts = [], getPerson, onClose, onSubmit }) 
                 placeholder="e.g., Bank transfer, Instapay, Cash"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="w-full min-h-[48px] text-sm px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50"
+                className="w-full min-h-[48px] text-sm px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100"
               />
             </div>
 
-            {error && <p className="text-xs font-bold text-rose-600">{error}</p>}
+            {error && <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{error}</p>}
           </div>
 
-          <div className="px-5 pt-3 pb-[calc(0.85rem+env(safe-area-inset-bottom))] border-t border-slate-100 bg-white flex gap-2.5 shrink-0">
+          <div className="px-5 pt-3 pb-[calc(0.85rem+env(safe-area-inset-bottom))] border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-[#111827] flex gap-2.5 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 min-h-[50px] py-3 rounded-2xl bg-slate-100 text-slate-700 text-sm font-bold touch-manipulation active:scale-[0.98]"
+              className="flex-1 min-h-[50px] py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-bold touch-manipulation active:scale-[0.98]"
             >
               Cancel
             </button>

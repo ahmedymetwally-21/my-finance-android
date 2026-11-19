@@ -1,34 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportHeight="108"
-    android:viewportWidth="108">
-    <path
-        android:fillType="evenOdd"
-        android:pathData="M32,64C32,64 38.39,52.99 44.13,50.95C51.37,48.37 70.14,49.57 70.14,49.57L108.26,87.69L108,109.01L75.97,107.97L32,64Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="78.5885"
-                android:endY="90.9159"
-                android:startX="48.7653"
-                android:startY="61.0927"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M66.94,46.02L66.94,46.02C72.44,50.07 76,56.61 76,64L32,64C32,56.61 35.56,50.11 40.98,46.06L36.18,41.19C35.45,40.45 35.45,39.3 36.18,38.56C36.91,37.81 38.05,37.81 38.78,38.56L44.25,44.05C47.18,42.57 50.48,41.71 54,41.71C57.48,41.71 60.78,42.57 63.68,44.05L69.11,38.56C69.84,37.81 70.98,37.81 71.71,38.56C72.44,39.3 72.44,40.45 71.71,41.19L66.94,46.02ZM62.94,56.92C64.08,56.92 65,56.01 65,54.88C65,53.76 64.08,52.85 62.94,52.85C61.8,52.85 60.88,53.76 60.88,54.88C60.88,56.01 61.8,56.92 62.94,56.92ZM45.06,56.92C46.2,56.92 47.13,56.01 47.13,54.88C47.13,53.76 46.2,52.85 45.06,52.85C43.92,52.85 43,53.76 43,54.88C43,56.01 43.92,56.92 45.06,56.92Z"
-        android:strokeColor="#00000000"
-        android:strokeWidth="1" />
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Centered inside inner 62% adaptive safe zone (translate +4dp on 100x100 design grid) -->
+    <group
+        android:translateX="4"
+        android:translateY="4">
+        <!-- Subtle ambient emerald radial aura fading to transparent well inside bounds -->
+        <path android:pathData="M50,50m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:centerX="50"
+                    android:centerY="48"
+                    android:gradientRadius="38"
+                    android:type="radial">
+                    <item android:color="#2610B981" android:offset="0.0" />
+                    <item android:color="#00090D16" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Executive Champagne Gold Top Ledger Card -->
+        <path android:pathData="M31,36 L31,31 C31,27.96 33.46,25.5 36.5,25.5 L63.5,25.5 C66.54,25.5 69,27.96 69,31 L69,36 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="31"
+                    android:startY="25.5"
+                    android:endX="69"
+                    android:endY="36"
+                    android:type="linear">
+                    <item android:color="#FDE68A" android:offset="0.0" />
+                    <item android:color="#F59E0B" android:offset="0.55" />
+                    <item android:color="#B45309" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Crisp dark seam between top gold card and wallet spine -->
+        <path
+            android:fillColor="#090D16"
+            android:pathData="M30,33.2 L70,33.2 L70,35.6 L30,35.6 Z" />
+
+        <!-- Geometric Wallet Body Fill (Deep Emerald-Obsidian) -->
+        <path
+            android:pathData="M32,35 L68,35 C72.42,35 76,38.58 76,43 L76,66 C76,70.42 72.42,74 68,74 L32,74 C27.58,74 24,70.42 24,66 L24,43 C24,38.58 27.58,35 32,35 Z"
+            android:strokeWidth="2.6">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="24"
+                    android:startY="35"
+                    android:endX="76"
+                    android:endY="74"
+                    android:type="linear">
+                    <item android:color="#0F3A31" android:offset="0.0" />
+                    <item android:color="#0A2026" android:offset="0.55" />
+                    <item android:color="#091521" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="24"
+                    android:startY="35"
+                    android:endX="76"
+                    android:endY="74"
+                    android:type="linear">
+                    <item android:color="#34D399" android:offset="0.0" />
+                    <item android:color="#10B981" android:offset="0.5" />
+                    <item android:color="#047857" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Ascending Emerald Ledger Pillar 1 -->
+        <path
+            android:fillColor="#059669"
+            android:pathData="M32.6,60 L34,60 C34.88,60 35.6,60.72 35.6,61.6 L35.6,67.5 L31,67.5 L31,61.6 C31,60.72 31.72,60 32.6,60 Z" />
+
+        <!-- Ascending Emerald Ledger Pillar 2 -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M40.1,55 L41.5,55 C42.38,55 43.1,55.72 43.1,56.6 L43.1,67.5 L38.5,67.5 L38.5,56.6 C38.5,55.72 39.22,55 40.1,55 Z" />
+
+        <!-- Ascending Emerald Ledger Pillar 3 -->
+        <path
+            android:fillColor="#34D399"
+            android:pathData="M47.6,49.5 L49,49.5 C49.88,49.5 50.6,50.22 50.6,51.1 L50.6,67.5 L46,67.5 L46,51.1 C46,50.22 46.72,49.5 47.6,49.5 Z" />
+
+        <!-- Gold Upward Ledger Trajectory Line -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M31.2,53.5 L39.4,47.2 L44.4,50.4 L54.6,40.8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="3.0">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="31"
+                    android:startY="53.5"
+                    android:endX="55"
+                    android:endY="40.5"
+                    android:type="linear">
+                    <item android:color="#F59E0B" android:offset="0.0" />
+                    <item android:color="#FDE68A" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Gold Geometric Upward Chevron Arrowhead -->
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M49.0,40.6 L55.0,40.6 L55.0,46.6"
+            android:strokeColor="#FDE68A"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeWidth="3.0" />
+
+        <!-- Minimalist Emerald Clasp Pill -->
+        <path android:pathData="M65.8,48.5 L76.6,48.5 L76.6,61.5 L65.8,61.5 C62.21,61.5 59.3,58.59 59.3,55 C59.3,51.41 62.21,48.5 65.8,48.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="59.3"
+                    android:startY="48.5"
+                    android:endX="76.6"
+                    android:endY="61.5"
+                    android:type="linear">
+                    <item android:color="#34D399" android:offset="0.0" />
+                    <item android:color="#059669" android:offset="1.0" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- Gold Clasp Fastener Stud -->
+        <path
+            android:fillColor="#FDE68A"
+            android:pathData="M66.2,55m-3.1,0a3.1,3.1 0,1 1,6.2 0a3.1,3.1 0,1 1,-6.2 0" />
+    </group>
 </vector>

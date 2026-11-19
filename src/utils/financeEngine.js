@@ -1,8 +1,10 @@
-// Pure financial engine, dual-currency accounting, dynamic participant splits,
-// default sharing resolution, upcoming recurring scheduler, and period cleanup.
+// Pure financial engine, multi-currency accounting, hierarchical section/part budgeting,
+// dynamic participant splits, default sharing resolution, upcoming recurring scheduler,
+// and period cleanup.
 
 export const STORAGE_KEY = 'pf_shared_ledger_v1';
 export const LEGACY_STORAGE_KEY = 'fintrack_dual_shared_v1';
+export const THEME_STORAGE_KEY = 'smartledger_theme';
 
 export const COLOR_PALETTE = [
   '#4f46e5', // Indigo
@@ -16,6 +18,60 @@ export const COLOR_PALETTE = [
   '#ea580c', // Orange
   '#475569'  // Slate
 ];
+
+export const DEFAULT_CURRENCIES = [
+  { code: 'AED', name: 'UAE Dirham', symbol: 'AED', builtIn: true },
+  { code: 'EGP', name: 'Egyptian Pound', symbol: 'EGP', builtIn: true }
+];
+
+export const PRESET_CURRENCIES = [
+  { code: 'USD', name: 'US Dollar', symbol: '$' },
+  { code: 'EUR', name: 'Euro', symbol: '€' },
+  { code: 'SAR', name: 'Saudi Riyal', symbol: 'SAR' },
+  { code: 'GBP', name: 'British Pound', symbol: '£' },
+  { code: 'KWD', name: 'Kuwaiti Dinar', symbol: 'KWD' },
+  { code: 'QAR', name: 'Qatari Riyal', symbol: 'QAR' },
+  { code: 'BHD', name: 'Bahraini Dinar', symbol: 'BHD' },
+  { code: 'TRY', name: 'Turkish Lira', symbol: '₺' },
+  { code: 'INR', name: 'Indian Rupee', symbol: '₹' },
+  { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$' }
+];
+
+const CURRENCY_GRADIENTS = {
+  AED: 'from-indigo-600 to-blue-600',
+  EGP: 'from-emerald-600 to-teal-600',
+  USD: 'from-violet-600 to-indigo-600',
+  EUR: 'from-sky-600 to-blue-700',
+  SAR: 'from-emerald-700 to-green-600',
+  GBP: 'from-rose-600 to-indigo-700',
+  KWD: 'from-cyan-600 to-teal-700',
+  QAR: 'from-fuchsia-700 to-rose-700'
+};
+
+const FALLBACK_GRADIENTS = [
+  'from-amber-600 to-orange-600',
+  'from-cyan-600 to-blue-600',
+  'from-violet-600 to-purple-600',
+  'from-teal-600 to-emerald-700',
+  'from-rose-600 to-pink-600'
+];
+
+export function getCurrencyAccent(code, index = 0) {
+  const upper = String(code || 'AED').toUpperCase();
+  const gradient =
+    CURRENCY_GRADIENTS[upper] || FALLBACK_GRADIENTS[index % FALLBACK_GRADIENTS.length];
+  const badgeClass =
+    upper === 'AED'
+      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300'
+      : upper === 'EGP'
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300'
+      : upper === 'USD'
+      ? 'bg-violet-50 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300'
+      : upper === 'EUR'
+      ? 'bg-sky-50 text-sky-700 dark:bg-sky-950/70 dark:text-sky-300'
+      : 'bg-amber-50 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300';
+  return { gradient, badgeClass };
+}
 
 export const DEFAULT_PEOPLE = [
   { id: 'me', name: 'Me', color: '#4f46e5', archived: false },
@@ -84,7 +140,13 @@ export const DEFAULT_ACCOUNTS = [
 ];
 
 export const DEFAULT_APPEARANCE_PREFS = {
-  showLaunchSplash: true
+  showLaunchSplash: true,
+  theme: 'dark' // 'dark' | 'light' | 'system'
+};
+
+export const DEFAULT_USER_PROFILE = {
+  displayName: 'SmartLedger User',
+  avatarDataUrl: ''
 };
 
 export const pad2 = (n) => String(n).padStart(2, '0');
@@ -103,10 +165,11 @@ export const getCurrentYearMonth = () => {
 
 export const formatMoney = (amount, currency = 'AED') => {
   const val = round2(amount || 0);
+  const code = String(currency || 'AED').toUpperCase();
   return `${val.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
-  })} ${currency}`;
+  })} ${code}`;
 };
 
 export const formatCompact = (amount) => {
@@ -117,14 +180,230 @@ export const formatCompact = (amount) => {
   });
 };
 
+export function getCurrencyCodes(currencies = DEFAULT_CURRENCIES, extraItems = []) {
+  const set = new Set();
+  (Array.isArray(currencies) && currencies.length > 0 ? currencies : DEFAULT_CURRENCIES).forEach(
+    (c) => {
+      const code = typeof c === 'string' ? c : c?.code;
+      if (code) set.add(String(code).toUpperCase());
+    }
+  );
+  (extraItems || []).forEach((item) => {
+    if (item && item.currency) set.add(String(item.currency).toUpperCase());
+  });
+  if (set.size === 0) {
+    set.add('AED');
+    set.add('EGP');
+  }
+  return Array.from(set);
+}
+
+export function getCurrencyMeta(currencies = DEFAULT_CURRENCIES, code = 'AED') {
+  const upper = String(code || 'AED').toUpperCase();
+  const found = (currencies || DEFAULT_CURRENCIES).find((c) => c.code === upper);
+  if (found) return found;
+  const preset = PRESET_CURRENCIES.find((c) => c.code === upper);
+  if (preset) return { ...preset, builtIn: false };
+  return { code: upper, name: `${upper} Wallet`, symbol: upper, builtIn: false };
+}
+
+export function getCurrencyUsage(
+  code,
+  {
+    accounts = [],
+    transactions = [],
+    settlements = [],
+    upcomingTransactions = [],
+    pendingTransactions = [],
+    accountTransfers = []
+  } = {}
+) {
+  const upper = String(code || '').toUpperCase();
+  const accountCount = (accounts || []).filter((a) => a.currency === upper).length;
+  const txCount = (transactions || []).filter((t) => t.currency === upper).length;
+  const settlementCount = (settlements || []).filter((s) => s.currency === upper).length;
+  const upcomingCount = (upcomingTransactions || []).filter((u) => u.currency === upper).length;
+  const pendingCount = (pendingTransactions || []).filter((p) => p.currency === upper).length;
+  const transferCount = (accountTransfers || []).filter((tr) => tr.currency === upper).length;
+
+  const totalRecords =
+    accountCount + txCount + settlementCount + upcomingCount + pendingCount + transferCount;
+  return {
+    inUse: totalRecords > 0,
+    accountCount,
+    txCount,
+    settlementCount,
+    upcomingCount,
+    pendingCount,
+    transferCount,
+    totalRecords
+  };
+}
+
+// ============================================================================
+// HIERARCHICAL BUDGETING ENGINE (SECTION BUDGETS + PART ALLOCATIONS)
+// ============================================================================
+
+/**
+ * Cent-safe equal distribution of a Section's monthly budget across its Parts (categories).
+ */
+export function splitSectionBudgetEqually(sectionTotal, categoryIds = []) {
+  const result = {};
+  const uniqueIds = Array.from(new Set(categoryIds || []));
+  const count = uniqueIds.length;
+  if (count === 0) return result;
+  const safeTotal = round2(Math.max(0, Number(sectionTotal) || 0));
+  if (safeTotal <= 0) {
+    uniqueIds.forEach((id) => {
+      result[id] = 0;
+    });
+    return result;
+  }
+
+  const totalCents = Math.round(safeTotal * 100);
+  const baseCents = Math.floor(totalCents / count);
+  let remainder = totalCents - baseCents * count;
+
+  uniqueIds.forEach((cid) => {
+    const extra = remainder > 0 ? 1 : 0;
+    if (remainder > 0) remainder -= 1;
+    result[cid] = (baseCents + extra) / 100;
+  });
+  return result;
+}
+
+export function getBudgetHealthStatus(spent, budget) {
+  const b = round2(budget || 0);
+  const s = round2(spent || 0);
+  if (b <= 0) {
+    return {
+      status: s > 0 ? 'unbudgeted_spend' : 'unset',
+      percentUsed: s > 0 ? 100 : 0,
+      label: s > 0 ? 'No Budget Set' : 'Not Set'
+    };
+  }
+  const percentUsed = round2((s / b) * 100);
+  if (percentUsed >= 100) {
+    return { status: 'over', percentUsed, label: 'Over Budget' };
+  }
+  if (percentUsed >= 75) {
+    return { status: 'warning', percentUsed, label: 'Near Limit' };
+  }
+  return { status: 'healthy', percentUsed, label: 'On Track' };
+}
+
+/**
+ * Computes hierarchical monthly spending vs budgets for all expense Sections and their Parts
+ * in a single selected currency, strictly from posted transactions (my share).
+ */
+export function computeHierarchicalBudgets({
+  sections = DEFAULT_SECTIONS,
+  categories = DEFAULT_CATEGORIES,
+  budgets = {},
+  periodTransactions = [],
+  currency = 'AED'
+}) {
+  const cur = String(currency || 'AED').toUpperCase();
+  const curBudgetMap = (budgets && budgets[cur]) || {};
+
+  // Compute my actual posted spending per category in this currency
+  const spendByCat = {};
+  (periodTransactions || []).forEach((tx) => {
+    if (tx.type !== 'expense' || String(tx.currency || '').toUpperCase() !== cur) return;
+    const myShare = getEffectiveShares(tx).me || 0;
+    if (myShare <= 0) return;
+    spendByCat[tx.categoryId] = round2((spendByCat[tx.categoryId] || 0) + myShare);
+  });
+
+  const expenseSections = (sections || []).filter((s) => s.type === 'expense');
+
+  let totalBudgeted = 0;
+  let totalSpent = 0;
+  let totalPartsAllocated = 0;
+  let overBudgetSectionsCount = 0;
+  let overAllocatedSectionsCount = 0;
+
+  const sectionItems = expenseSections.map((sec) => {
+    const secCats = (categories || []).filter(
+      (c) => c.sectionId === sec.id && c.type === 'expense'
+    );
+    const secEntry = curBudgetMap[sec.id] || {};
+    const sectionBudget = round2(Math.max(0, Number(secEntry.sectionBudget) || 0));
+    const partsBudgetMap = secEntry.parts || {};
+
+    let allocatedPartsTotal = 0;
+    let sectionSpent = 0;
+
+    const parts = secCats.map((cat) => {
+      const budget = round2(Math.max(0, Number(partsBudgetMap[cat.id]) || 0));
+      const spent = round2(spendByCat[cat.id] || 0);
+      const remaining = round2(budget - spent);
+      const health = getBudgetHealthStatus(spent, budget);
+
+      allocatedPartsTotal = round2(allocatedPartsTotal + budget);
+      sectionSpent = round2(sectionSpent + spent);
+
+      return {
+        category: cat,
+        budget,
+        spent,
+        remaining,
+        percentUsed: health.percentUsed,
+        status: health.status,
+        statusLabel: health.label
+      };
+    });
+
+    const unallocated = round2(sectionBudget - allocatedPartsTotal);
+    const isOverAllocated = allocatedPartsTotal > sectionBudget + 0.009;
+    const overAllocatedBy = isOverAllocated ? round2(allocatedPartsTotal - sectionBudget) : 0;
+
+    const sectionRemaining = round2(sectionBudget - sectionSpent);
+    const sectionHealth = getBudgetHealthStatus(sectionSpent, sectionBudget);
+
+    totalBudgeted = round2(totalBudgeted + sectionBudget);
+    totalSpent = round2(totalSpent + sectionSpent);
+    totalPartsAllocated = round2(totalPartsAllocated + allocatedPartsTotal);
+    if (sectionHealth.status === 'over') overBudgetSectionsCount += 1;
+    if (isOverAllocated) overAllocatedSectionsCount += 1;
+
+    return {
+      section: sec,
+      sectionBudget,
+      allocatedPartsTotal,
+      unallocated,
+      isOverAllocated,
+      overAllocatedBy,
+      sectionSpent,
+      sectionRemaining,
+      percentUsed: sectionHealth.percentUsed,
+      status: sectionHealth.status,
+      statusLabel: sectionHealth.label,
+      parts
+    };
+  });
+
+  const overallHealth = getBudgetHealthStatus(totalSpent, totalBudgeted);
+
+  return {
+    currency: cur,
+    totalBudgeted,
+    totalPartsAllocated,
+    totalSpent,
+    totalRemaining: round2(totalBudgeted - totalSpent),
+    overallPercentUsed: overallHealth.percentUsed,
+    overallStatus: overallHealth.status,
+    overallStatusLabel: overallHealth.label,
+    overBudgetSectionsCount,
+    overAllocatedSectionsCount,
+    sections: sectionItems
+  };
+}
+
 // ============================================================================
 // DYNAMIC PARTICIPANT SHARE CALCULATIONS
 // ============================================================================
 
-/**
- * Exact cent/fils-safe equal split across any number of participants.
- * Ensures the sum of shares strictly equals totalAmount.
- */
 export function computeEqualShares(totalAmount, participantIds) {
   const result = {};
   const uniqueIds = Array.from(new Set(participantIds || []));
@@ -143,17 +422,13 @@ export function computeEqualShares(totalAmount, participantIds) {
   return result;
 }
 
-/**
- * Compute equal percentage strings (e.g., 33.34, 33.33, 33.33 for 3 people)
- * summing strictly to 100.00.
- */
 export function computeEqualPercentages(participantIds) {
   const result = {};
   const uniqueIds = Array.from(new Set(participantIds || []));
   const count = uniqueIds.length;
   if (count === 0) return result;
 
-  const totalBp = 10000; // 100.00% in basis points
+  const totalBp = 10000;
   const baseBp = Math.floor(totalBp / count);
   let remainder = totalBp - baseBp * count;
 
@@ -165,10 +440,6 @@ export function computeEqualPercentages(participantIds) {
   return result;
 }
 
-/**
- * Compute currency shares from percentage inputs across dynamic participants.
- * Adjusts the final positive participant's share by residual cents so sum === totalAmount.
- */
 export function computePercentageShares(totalAmount, participantIds, percentageMap) {
   const result = {};
   if (totalAmount <= 0 || !Array.isArray(participantIds) || participantIds.length === 0) {
@@ -193,10 +464,6 @@ export function computePercentageShares(totalAmount, participantIds, percentageM
   return result;
 }
 
-/**
- * Effective shares for any expense (Shared splits & Personal "On Behalf" expenses).
- * Supports unlimited participant IDs dynamically.
- */
 export function getEffectiveShares(tx) {
   if (!tx || tx.type !== 'expense') return {};
   if (tx.isShared) {
@@ -216,7 +483,7 @@ export function getEffectiveShares(tx) {
 }
 
 // ============================================================================
-// DYNAMIC DEBT & DUAL-CURRENCY SUMMARY ENGINE
+// DYNAMIC DEBT & MULTI-CURRENCY SUMMARY ENGINE
 // ============================================================================
 
 export function computeDebtItems(transactions, settlements) {
@@ -227,7 +494,6 @@ export function computeDebtItems(transactions, settlements) {
     if (tx.type !== 'expense') return;
     const shares = getEffectiveShares(tx);
 
-    // Case A: Me paid -> Check all other participants who owe a share
     if (tx.paidBy === 'me') {
       Object.entries(shares).forEach(([pid, rawShare]) => {
         if (pid === 'me') return;
@@ -265,7 +531,6 @@ export function computeDebtItems(transactions, settlements) {
       });
     }
 
-    // Case B: Any other participant paid -> Check if Me owes a share
     if (tx.paidBy && tx.paidBy !== 'me') {
       const myShare = round2(shares.me || 0);
       if (myShare > 0) {
@@ -307,7 +572,19 @@ export function computeDebtItems(transactions, settlements) {
   return { receivables, payables };
 }
 
-export function computeFinancialSummary(periodTransactions, periodSettlements, allDebtItems) {
+export function computeFinancialSummary(
+  periodTransactions,
+  periodSettlements,
+  allDebtItems,
+  currencies = DEFAULT_CURRENCIES
+) {
+  const codes = getCurrencyCodes(currencies, [
+    ...(periodTransactions || []),
+    ...(periodSettlements || []),
+    ...(allDebtItems?.receivables || []),
+    ...(allDebtItems?.payables || [])
+  ]);
+
   const computeForCurrency = (cur) => {
     const txs = (periodTransactions || []).filter((t) => t.currency === cur);
     const sets = (periodSettlements || []).filter((s) => s.currency === cur);
@@ -385,10 +662,11 @@ export function computeFinancialSummary(periodTransactions, periodSettlements, a
     };
   };
 
-  return {
-    AED: computeForCurrency('AED'),
-    EGP: computeForCurrency('EGP')
-  };
+  const result = {};
+  codes.forEach((code) => {
+    result[code] = computeForCurrency(code);
+  });
+  return result;
 }
 
 // ============================================================================
@@ -396,17 +674,17 @@ export function computeFinancialSummary(periodTransactions, periodSettlements, a
 // ============================================================================
 
 export function getDefaultAccountIdForCurrency(accounts, currency) {
-  const list = (accounts || []).filter((a) => a.currency === currency);
-  if (list.length === 0) return currency === 'EGP' ? 'acc_cash_egp' : 'acc_cash_aed';
+  const cur = String(currency || 'AED').toUpperCase();
+  const list = (accounts || []).filter((a) => a.currency === cur);
+  if (list.length === 0) {
+    if (cur === 'EGP') return 'acc_cash_egp';
+    if (cur === 'AED') return 'acc_cash_aed';
+    return '';
+  }
   const cashAcc = list.find((a) => a.type === 'cash');
   return (cashAcc || list[0]).id;
 }
 
-/**
- * Computes true, all-time live balances per account (Cash, Debit, Credit, Bank).
- * Legacy transactions/settlements without accountId automatically map to that currency's default account.
- * Strictly ignores pendingTransactions and upcomingTransactions.
- */
 export function computeAccountBalances(
   accounts = DEFAULT_ACCOUNTS,
   allTransactions = [],
@@ -484,12 +762,13 @@ export function computeAccountBalances(
   return map;
 }
 
-/**
- * Computes true, cumulative all-time wallet totals across all accounts per currency
- * (including Cash, Debit Cards, Credit Cards, and Bank Accounts uniformly).
- * Independent of any date/month/year filter.
- */
-export function computeAllTimeWalletTotals(accounts = DEFAULT_ACCOUNTS, accountBalanceMap = {}) {
+export function computeAllTimeWalletTotals(
+  accounts = DEFAULT_ACCOUNTS,
+  accountBalanceMap = {},
+  currencies = DEFAULT_CURRENCIES
+) {
+  const codes = getCurrencyCodes(currencies, accounts);
+
   const sumCur = (cur) => {
     const curAccounts = (accounts || []).filter((a) => a.currency === cur);
     const totalBalance = round2(
@@ -513,16 +792,13 @@ export function computeAllTimeWalletTotals(accounts = DEFAULT_ACCOUNTS, accountB
     };
   };
 
-  return {
-    AED: sumCur('AED'),
-    EGP: sumCur('EGP')
-  };
+  const result = {};
+  codes.forEach((code) => {
+    result[code] = sumCur(code);
+  });
+  return result;
 }
 
-/**
- * Calculates the updated startingBalance needed so an account's live balance
- * equals targetCurrentBalance immediately.
- */
 export function computeStartingBalanceForTarget(account, balanceEntry, targetCurrentBalance) {
   const currentStart = round2(account?.startingBalance || 0);
   const currentBal = balanceEntry ? round2(balanceEntry.balance) : currentStart;
@@ -531,9 +807,9 @@ export function computeStartingBalanceForTarget(account, balanceEntry, targetCur
 }
 
 /**
- * Checks whether a participant has unsettled debt balances (AED or EGP).
+ * Checks whether a participant has unsettled debt balances across ANY currency.
  */
-export function getParticipantDebtStatus(personId, allDebtItems) {
+export function getParticipantDebtStatus(personId, allDebtItems, currencies = DEFAULT_CURRENCIES) {
   const openReceivables = (allDebtItems?.receivables || []).filter(
     (r) => r.personId === personId && r.outstanding > 0
   );
@@ -541,21 +817,29 @@ export function getParticipantDebtStatus(personId, allDebtItems) {
     (p) => p.personId === personId && p.outstanding > 0
   );
 
-  const receiveAED = round2(
-    openReceivables.filter((r) => r.currency === 'AED').reduce((a, r) => a + r.outstanding, 0)
-  );
-  const receiveEGP = round2(
-    openReceivables.filter((r) => r.currency === 'EGP').reduce((a, r) => a + r.outstanding, 0)
-  );
-  const payAED = round2(
-    openPayables.filter((p) => p.currency === 'AED').reduce((a, p) => a + p.outstanding, 0)
-  );
-  const payEGP = round2(
-    openPayables.filter((p) => p.currency === 'EGP').reduce((a, p) => a + p.outstanding, 0)
-  );
+  const codes = getCurrencyCodes(currencies, [...openReceivables, ...openPayables]);
+  const byCurrency = {};
+  let hasUnsettledBalance = false;
 
-  const hasUnsettledBalance = receiveAED > 0 || receiveEGP > 0 || payAED > 0 || payEGP > 0;
-  return { hasUnsettledBalance, receiveAED, receiveEGP, payAED, payEGP };
+  codes.forEach((cur) => {
+    const receive = round2(
+      openReceivables.filter((r) => r.currency === cur).reduce((a, r) => a + r.outstanding, 0)
+    );
+    const pay = round2(
+      openPayables.filter((p) => p.currency === cur).reduce((a, p) => a + p.outstanding, 0)
+    );
+    byCurrency[cur] = { receive, pay };
+    if (receive > 0 || pay > 0) hasUnsettledBalance = true;
+  });
+
+  return {
+    hasUnsettledBalance,
+    byCurrency,
+    receiveAED: byCurrency.AED?.receive || 0,
+    receiveEGP: byCurrency.EGP?.receive || 0,
+    payAED: byCurrency.AED?.pay || 0,
+    payEGP: byCurrency.EGP?.pay || 0
+  };
 }
 
 // ============================================================================
@@ -604,9 +888,6 @@ export function resolveSharingDefaults(defaultSharing, categoryId, activePeople,
 // UPCOMING / SCHEDULED RECURRING TRANSACTIONS ENGINE
 // ============================================================================
 
-/**
- * Parse YYYY-MM-DD in UTC-safe integer components and compute calendar day diff.
- */
 export function parseDateParts(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') return null;
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -645,10 +926,6 @@ export function getDueStatus(dueDateStr, todayStr = getTodayStr()) {
   return { diff, label: `Due in ${diff} days`, tone: 'upcoming' };
 }
 
-/**
- * Advance a YYYY-MM-DD date by 'once' | 'weekly' | 'monthly' | 'yearly'.
- * Clamps end-of-month days safely (e.g., Jan 31 -> Feb 28/29).
- */
 export function advanceRecurringDate(dateStr, frequency) {
   const parts = parseDateParts(dateStr);
   if (!parts || !frequency || frequency === 'once') return dateStr;
@@ -659,7 +936,7 @@ export function advanceRecurringDate(dateStr, frequency) {
     return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
   }
   if (frequency === 'monthly') {
-    const targetMonthIndex = m; // 0-indexed next month (m is 1..12, so m is next month in 0-indexed)
+    const targetMonthIndex = m;
     const nextYear = y + Math.floor(targetMonthIndex / 12);
     const nextMonth1Based = (targetMonthIndex % 12) + 1;
     const daysInNextMonth = new Date(Date.UTC(nextYear, nextMonth1Based, 0)).getUTCDate();
@@ -675,10 +952,6 @@ export function advanceRecurringDate(dateStr, frequency) {
   return dateStr;
 }
 
-/**
- * Converts an upcoming item into a posted transaction on its dueDate,
- * and returns the updated upcomingTransactions list (removing one-time or advancing recurring).
- */
 export function confirmUpcomingTransaction(upcomingList, upcomingId, idSuffix = '') {
   const item = (upcomingList || []).find((u) => u.id === upcomingId);
   if (!item) return { postedTransaction: null, nextUpcomingList: upcomingList || [] };
@@ -752,7 +1025,8 @@ export function previewPeriodDeletion(
   settlements,
   startDate,
   endDate,
-  deletionScope = 'transactions_only'
+  deletionScope = 'transactions_only',
+  currencies = DEFAULT_CURRENCIES
 ) {
   if (!startDate || !endDate || startDate > endDate) {
     return {
@@ -762,7 +1036,8 @@ export function previewPeriodDeletion(
       totalTxCount: 0,
       aedSetCount: 0,
       egpSetCount: 0,
-      totalSetCount: 0
+      totalSetCount: 0,
+      byCurrency: {}
     };
   }
 
@@ -774,19 +1049,24 @@ export function previewPeriodDeletion(
       ? (settlements || []).filter((s) => isDateInRange(s.date, startDate, endDate))
       : [];
 
-  const aedTxCount = matchingTxs.filter((t) => t.currency === 'AED').length;
-  const egpTxCount = matchingTxs.filter((t) => t.currency === 'EGP').length;
-  const aedSetCount = matchingSets.filter((s) => s.currency === 'AED').length;
-  const egpSetCount = matchingSets.filter((s) => s.currency === 'EGP').length;
+  const codes = getCurrencyCodes(currencies, [...matchingTxs, ...matchingSets]);
+  const byCurrency = {};
+  codes.forEach((cur) => {
+    byCurrency[cur] = {
+      txCount: matchingTxs.filter((t) => t.currency === cur).length,
+      setCount: matchingSets.filter((s) => s.currency === cur).length
+    };
+  });
 
   return {
     valid: true,
-    aedTxCount,
-    egpTxCount,
+    aedTxCount: byCurrency.AED?.txCount || 0,
+    egpTxCount: byCurrency.EGP?.txCount || 0,
     totalTxCount: matchingTxs.length,
-    aedSetCount,
-    egpSetCount,
-    totalSetCount: matchingSets.length
+    aedSetCount: byCurrency.AED?.setCount || 0,
+    egpSetCount: byCurrency.EGP?.setCount || 0,
+    totalSetCount: matchingSets.length,
+    byCurrency
   };
 }
 
@@ -820,8 +1100,88 @@ export function executePeriodDeletion(
 }
 
 // ============================================================================
-// BACKWARD-COMPATIBLE BACKUP NORMALIZATION & DEMO DATA
+// BACKWARD-COMPATIBLE NORMALIZERS & DEMO DATA
 // ============================================================================
+
+export function normalizeCurrenciesList(rawCurrencies, extraRecords = []) {
+  const map = new Map();
+  DEFAULT_CURRENCIES.forEach((c) => {
+    map.set(c.code, { ...c });
+  });
+
+  if (Array.isArray(rawCurrencies)) {
+    rawCurrencies.forEach((c) => {
+      const code = String(typeof c === 'string' ? c : c?.code || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z]/g, '')
+        .slice(0, 3);
+      if (code.length !== 3) return;
+      const existing = map.get(code);
+      const preset = PRESET_CURRENCIES.find((p) => p.code === code);
+      map.set(code, {
+        code,
+        name: String(c?.name || existing?.name || preset?.name || `${code} Currency`).trim(),
+        symbol: String(c?.symbol || existing?.symbol || preset?.symbol || code).trim(),
+        builtIn: Boolean(existing?.builtIn || code === 'AED' || code === 'EGP')
+      });
+    });
+  }
+
+  (extraRecords || []).forEach((rec) => {
+    const code = String(rec?.currency || '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]/g, '')
+      .slice(0, 3);
+    if (code.length === 3 && !map.has(code)) {
+      const preset = PRESET_CURRENCIES.find((p) => p.code === code);
+      map.set(code, {
+        code,
+        name: preset?.name || `${code} Currency`,
+        symbol: preset?.symbol || code,
+        builtIn: code === 'AED' || code === 'EGP'
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+export function normalizeBudgets(rawBudgets) {
+  if (!rawBudgets || typeof rawBudgets !== 'object') return {};
+  const result = {};
+  Object.entries(rawBudgets).forEach(([curKey, secMap]) => {
+    const cur = String(curKey || '').trim().toUpperCase();
+    if (!cur || !secMap || typeof secMap !== 'object') return;
+    result[cur] = {};
+    Object.entries(secMap).forEach(([secId, entry]) => {
+      if (!entry || typeof entry !== 'object') return;
+      const sectionBudget = round2(Math.max(0, Number(entry.sectionBudget) || 0));
+      const parts = {};
+      if (entry.parts && typeof entry.parts === 'object') {
+        Object.entries(entry.parts).forEach(([catId, val]) => {
+          const num = round2(Math.max(0, Number(val) || 0));
+          if (num > 0) parts[catId] = num;
+        });
+      }
+      result[cur][secId] = { sectionBudget, parts };
+    });
+  });
+  return result;
+}
+
+export function normalizeUserProfile(rawProfile) {
+  if (!rawProfile || typeof rawProfile !== 'object') {
+    return { ...DEFAULT_USER_PROFILE };
+  }
+  const displayName = String(rawProfile.displayName || '').trim() || DEFAULT_USER_PROFILE.displayName;
+  const avatarDataUrl =
+    typeof rawProfile.avatarDataUrl === 'string' && rawProfile.avatarDataUrl.startsWith('data:image/')
+      ? rawProfile.avatarDataUrl
+      : '';
+  return { displayName, avatarDataUrl };
+}
 
 export function normalizePeopleList(rawPeople) {
   if (!Array.isArray(rawPeople) || rawPeople.length === 0) return DEFAULT_PEOPLE;
@@ -859,18 +1219,23 @@ export function normalizeSharingPrefs(rawPrefs) {
   };
 }
 
-export function normalizeAccountsList(rawAccounts) {
+export function normalizeAccountsList(rawAccounts, currencies = DEFAULT_CURRENCIES) {
   if (!Array.isArray(rawAccounts) || rawAccounts.length === 0) {
     return DEFAULT_ACCOUNTS.map((a) => ({ ...a }));
   }
-  const normalized = rawAccounts.map((acc, idx) => ({
-    id: acc.id || `acc_${idx}_${Date.now()}`,
-    name: String(acc.name || `Account ${idx + 1}`).trim(),
-    type: ['cash', 'debit', 'credit', 'bank'].includes(acc.type) ? acc.type : 'cash',
-    currency: acc.currency === 'EGP' ? 'EGP' : 'AED',
-    last4: String(acc.last4 || '').replace(/\D/g, '').slice(-4),
-    startingBalance: round2(acc.startingBalance || 0)
-  }));
+  const validCodes = new Set(getCurrencyCodes(currencies));
+  const normalized = rawAccounts.map((acc, idx) => {
+    const rawCur = String(acc.currency || 'AED').trim().toUpperCase();
+    const currency = rawCur.length === 3 ? rawCur : validCodes.has(rawCur) ? rawCur : 'AED';
+    return {
+      id: acc.id || `acc_${idx}_${Date.now()}`,
+      name: String(acc.name || `Account ${idx + 1}`).trim(),
+      type: ['cash', 'debit', 'credit', 'bank'].includes(acc.type) ? acc.type : 'cash',
+      currency,
+      last4: String(acc.last4 || '').replace(/\D/g, '').slice(-4),
+      startingBalance: round2(acc.startingBalance || 0)
+    };
+  });
 
   if (!normalized.some((a) => a.currency === 'AED')) {
     normalized.unshift({ ...DEFAULT_ACCOUNTS[0] });
@@ -885,9 +1250,11 @@ export function normalizeAppearancePrefs(rawPrefs) {
   if (!rawPrefs || typeof rawPrefs !== 'object') {
     return { ...DEFAULT_APPEARANCE_PREFS };
   }
+  const validThemes = ['dark', 'light', 'system'];
   return {
     showLaunchSplash:
-      typeof rawPrefs.showLaunchSplash === 'boolean' ? rawPrefs.showLaunchSplash : true
+      typeof rawPrefs.showLaunchSplash === 'boolean' ? rawPrefs.showLaunchSplash : true,
+    theme: validThemes.includes(rawPrefs.theme) ? rawPrefs.theme : 'dark'
   };
 }
 
@@ -896,8 +1263,23 @@ export function normalizeImportedBackup(parsed) {
   if (!payload || !Array.isArray(payload.transactions)) {
     return null;
   }
-  const accounts = normalizeAccountsList(payload.accounts);
+  const currencies = normalizeCurrenciesList(payload.currencies, [
+    ...(payload.accounts || []),
+    ...(payload.transactions || []),
+    ...(payload.settlements || []),
+    ...(payload.upcomingTransactions || []),
+    ...(payload.pendingTransactions || [])
+  ]);
+  const primaryCurrency = currencies.some((c) => c.code === payload.primaryCurrency)
+    ? payload.primaryCurrency
+    : 'AED';
+  const accounts = normalizeAccountsList(payload.accounts, currencies);
+
   return {
+    currencies,
+    primaryCurrency,
+    budgets: normalizeBudgets(payload.budgets),
+    userProfile: normalizeUserProfile(payload.userProfile),
     people: normalizePeopleList(payload.people),
     sections: Array.isArray(payload.sections) ? payload.sections : DEFAULT_SECTIONS,
     categories: Array.isArray(payload.categories) ? payload.categories : DEFAULT_CATEGORIES,
@@ -1236,12 +1618,52 @@ export function buildDemoData() {
     }
   ];
 
+  const budgets = {
+    AED: {
+      sec_housing: {
+        sectionBudget: 5000,
+        parts: {
+          cat_rent: 4200,
+          cat_bills: 550,
+          cat_subs: 250
+        }
+      },
+      sec_daily: {
+        sectionBudget: 1200,
+        parts: {
+          cat_groceries: 400,
+          cat_restaurants: 500,
+          cat_transport: 300
+        }
+      },
+      sec_lifestyle: {
+        sectionBudget: 1000,
+        parts: {
+          cat_shopping: 400,
+          cat_travel: 300,
+          cat_personal: 300
+        }
+      }
+    },
+    EGP: {
+      sec_daily: {
+        sectionBudget: 3500,
+        parts: {
+          cat_groceries: 1500,
+          cat_restaurants: 900,
+          cat_transport: 1100
+        }
+      }
+    }
+  };
+
   return {
     accounts,
     accountTransfers,
     transactions,
     settlements,
     upcomingTransactions,
-    pendingTransactions
+    pendingTransactions,
+    budgets
   };
 }
